@@ -359,7 +359,7 @@ class IM_AE(object):
                 avg_loss_sp += errSP.item()
                 avg_num += 1
             print(str(self.sample_vox_size) + " Epoch: [%2d/%2d] time: %4.4f, loss_sp: %.6f" % (
-            epoch, training_epoch, time.time() - start_time, avg_loss_sp / avg_num))
+                epoch, training_epoch, time.time() - start_time, avg_loss_sp / avg_num))
             if epoch % 10 == 9:
                 self.test_1(config, "train_" + str(self.sample_vox_size) + "_" + str(epoch))
             if epoch % 20 == 19:
@@ -668,3 +668,82 @@ class IM_AE(object):
             write_ply(config.sample_dir + "/" + "out" + str(t) + ".ply", vertices, triangles)
 
             print("[sample Z]")
+
+    def interpolate_z(self, config):
+        # load previous checkpoint
+        # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
+        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
+        if os.path.exists(checkpoint_txt):
+            fin = open(checkpoint_txt)
+            model_dir = fin.readline().strip()
+            fin.close()
+            self.im_network.load_state_dict(torch.load(model_dir))
+            print(" [*] Load SUCCESS")
+        else:
+            print(" [!] Load failed...")
+            return
+
+        z1 = int(config.interpol_z1)
+        z2 = int(config.interpol_z2)
+        interpol_steps = int(config.interpol_steps)
+        result_base_directory = config.interpol_directory
+        result_dir_name = 'interpol_' + str(z1) + '_' + str(z2)
+        result_dir = config.interpol_directory + '/' + result_dir_name
+
+        # Create output directory
+        if not os.path.isdir(result_dir):
+            os.mkdir(result_dir)
+            print('creating directory ' + result_dir)
+
+        # get latent vectors from hdf5
+        # hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
+        # hdf5_file = h5py.File(hdf5_path, mode='r')
+        # num_z = hdf5_file["zs"].shape[0]
+
+        if z1 < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z1:z1 + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z1_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z1_vec = z1_vec_.detach().cpu().numpy()
+        else:
+            print(" z1 not a valid number")
+
+        if z2 < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z2:z2 + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z2_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z2_vec = z2_vec_.detach().cpu().numpy()
+        else:
+            print(" z2 not a valid number")
+
+        # compute linear interpolation between vectors
+        fraction = np.linspace(0, 1, interpol_steps)
+        interpolated_z = np.multiply.outer(np.ones_like(fraction), z1_vec) + np.multiply.outer(fraction,
+                                                                                               z2_vec - z1_vec)
+        interpolated_z = interpolated_z.astype(np.float64)
+
+        for z_index in np.arange(interpol_steps):
+            start_time = time.time()
+            model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
+            # print('current latent vector:')
+            # print(model_z)
+
+            model_z = torch.from_numpy(model_z).float()
+            model_z = model_z.to(self.device)
+            model_float = self.z2voxel(model_z)
+            # img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
+            # img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
+            # img3 = np.clip(np.amax(model_float, axis=2)*256, 0,255).astype(np.uint8)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_1t.png",img1)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_2t.png",img2)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_3t.png",img3)
+
+            vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+            vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+            # vertices = self.optimize_mesh(vertices,model_z)
+            write_ply_triangle(result_dir + "/" + "out_" + str(z_index) + ".ply", vertices, triangles)
+
+            end_time = time.time() - start_time
+            print("computed interpolation {} in {} seconds".format(z_index, end_time))
