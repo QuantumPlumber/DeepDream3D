@@ -1,0 +1,295 @@
+import os
+import time
+import math
+import random
+import numpy as np
+import h5py
+
+import torch
+import torch.backends.cudnn as cudnn
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import optim
+from torch.autograd import Variable
+
+
+
+import mcubes
+
+from .utils import *
+from .modelAE import IM_AE
+
+class IM_AE_DD(IM_AE):
+    def __init__(self, config):
+        super().__init__(config)
+
+
+    def interpolate_z(self, config):
+        '''
+        A method to create the meshes from latent z vectors linearly interpolated between two vectors.
+
+        :param config:
+        :return:
+        '''
+        # load previous checkpoint
+        # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
+        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
+        if os.path.exists(checkpoint_txt):
+            fin = open(checkpoint_txt)
+            model_dir = fin.readline().strip()
+            fin.close()
+            self.im_network.load_state_dict(torch.load(model_dir))
+            print(" [*] Load SUCCESS")
+        else:
+            print(" [!] Load failed...")
+            return
+
+        z1 = int(config.interpol_z1)
+        z2 = int(config.interpol_z2)
+        interpol_steps = int(config.interpol_steps)
+        result_base_directory = config.interpol_directory
+        result_dir_name = 'interpol_' + str(z1) + '_' + str(z2)
+        result_dir = config.interpol_directory + '/' + result_dir_name
+
+        # Create output directory
+        if not os.path.isdir(result_dir):
+            os.mkdir(result_dir)
+            print('creating directory ' + result_dir)
+
+        # get latent vectors from hdf5
+        # hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
+        # hdf5_file = h5py.File(hdf5_path, mode='r')
+        # num_z = hdf5_file["zs"].shape[0]
+
+        if z1 < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z1:z1 + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z1_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z1_vec = z1_vec_.detach().cpu().numpy()
+        else:
+            print(" z1 not a valid number")
+
+        if z2 < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z2:z2 + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z2_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z2_vec = z2_vec_.detach().cpu().numpy()
+        else:
+            print(" z2 not a valid number")
+
+        # compute linear interpolation between vectors
+        fraction = np.linspace(0, 1, interpol_steps)
+        interpolated_z = np.multiply.outer(np.ones_like(fraction), z1_vec) + np.multiply.outer(fraction,
+                                                                                               z2_vec - z1_vec)
+        interpolated_z = interpolated_z.astype(np.float64)
+
+        for z_index in np.arange(interpol_steps):
+            start_time = time.time()
+            model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
+            # print('current latent vector:')
+            # print(model_z)
+
+            model_z = torch.from_numpy(model_z).float()
+            model_z = model_z.to(self.device)
+            model_float = self.z2voxel(model_z)
+            # img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
+            # img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
+            # img3 = np.clip(np.amax(model_float, axis=2)*256, 0,255).astype(np.uint8)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_1t.png",img1)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_2t.png",img2)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_3t.png",img3)
+
+            vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+            vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+            # vertices = self.optimize_mesh(vertices,model_z)
+            write_ply_triangle(result_dir + "/" + "out_" + str(z_index) + ".ply", vertices, triangles)
+
+            end_time = time.time() - start_time
+            print("computed interpolation {} in {} seconds".format(z_index, end_time))
+
+    def latent_gradient(self, z_base, z_target, encoder_layer):
+        '''
+        Computes the average derivative evaluated over the sample field
+
+        :param self:
+        :param z1:
+        :param z2:
+        :param step_size:
+        :return:
+        '''
+
+        # make sure z_base will accumulate gradients
+        z_base.requires_grad = True
+        # make sure gradients are set to zero to begin with.
+        self.im_network.zero_grad()
+
+
+        model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
+        dimc = self.cell_grid_size
+        dimf = self.frame_grid_size # coarse model evaluation
+
+        frame_flag = np.zeros([dimf + 2, dimf + 2, dimf + 2], np.uint8)
+        queue = []
+
+        frame_batch_num = int(dimf ** 3 / self.test_point_batch_size)
+        assert frame_batch_num > 0
+
+        # get frame grid values: this gets frame voxels that contain above threshold values
+        for i in range(frame_batch_num):
+            point_coord = self.frame_coords[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            point_coord = np.expand_dims(point_coord, axis=0)
+            point_coord = torch.from_numpy(point_coord)
+            point_coord = point_coord.to(self.device)
+            _, model_out_ = self.im_network(None, z_base, point_coord, is_training=False)
+            model_out = model_out_.detach().cpu().numpy()[0]
+            x_coords = self.frame_x[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            y_coords = self.frame_y[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            z_coords = self.frame_z[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            frame_flag[x_coords + 1, y_coords + 1, z_coords + 1] = np.reshape(
+                (model_out > self.sampling_threshold).astype(np.uint8), [self.test_point_batch_size])
+
+        # get queue and fill up ones
+        # This puts together a que of frame points to compute values for.
+        for i in range(1, dimf + 1):
+            for j in range(1, dimf + 1):
+                for k in range(1, dimf + 1):
+                    maxv = np.max(frame_flag[i - 1:i + 2, j - 1:j + 2, k - 1:k + 2])
+                    minv = np.min(frame_flag[i - 1:i + 2, j - 1:j + 2, k - 1:k + 2])
+                    if maxv != minv:
+                        queue.append((i, j, k))
+                    elif maxv == 1:
+                        x_coords = self.cell_x + (i - 1) * dimc
+                        y_coords = self.cell_y + (j - 1) * dimc
+                        z_coords = self.cell_z + (k - 1) * dimc
+                        model_float[x_coords + 1, y_coords + 1, z_coords + 1] = 1.0
+
+        print("running queue:", len(queue))
+        cell_batch_size = dimc ** 3
+        cell_batch_num = int(self.test_point_batch_size / cell_batch_size)
+        assert cell_batch_num > 0
+        # run queue
+        while len(queue) > 0:
+            batch_num = min(len(queue), cell_batch_num)
+            point_list = []
+            cell_coords = []
+            for i in range(batch_num):
+                point = queue.pop(0)
+                point_list.append(point)
+                cell_coords.append(self.cell_coords[point[0] - 1, point[1] - 1, point[2] - 1])
+            cell_coords = np.concatenate(cell_coords, axis=0)
+            cell_coords = np.expand_dims(cell_coords, axis=0)
+            cell_coords = torch.from_numpy(cell_coords)
+            cell_coords = cell_coords.to(self.device)
+
+            # Call the model on the target to get target encoder layer
+            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=True)
+            target_layer = self.im_network.generator.linear_3.detatch().cpu().numpy
+
+            # Call the model on the base to get base encoder layer, first set z_base to is_training = true
+            _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=True)
+            base_layer = self.im_network.generator.linear_3.detatch().cpu().numpy
+
+            # Now compute the gradient
+            gradient = np.tanh(np.abs((target_layer + base_layer) / (target_layer-base_layer)))
+            self.im_network.generator.linear_3.backward(gradient=gradient)
+
+            # set the gradient and backpropagate
+
+
+            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
+            for i in range(batch_num):
+                point = point_list[i]
+                model_out = model_out_batch[i * cell_batch_size:(i + 1) * cell_batch_size, 0]
+                x_coords = self.cell_x + (point[0] - 1) * dimc
+                y_coords = self.cell_y + (point[1] - 1) * dimc
+                z_coords = self.cell_z + (point[2] - 1) * dimc
+                model_float[x_coords + 1, y_coords + 1, z_coords + 1] = model_out
+
+                if np.max(model_out) > self.sampling_threshold:
+                    for i in range(-1, 2):
+                        pi = point[0] + i
+                        if pi <= 0 or pi > dimf: continue
+                        for j in range(-1, 2):
+                            pj = point[1] + j
+                            if pj <= 0 or pj > dimf: continue
+                            for k in range(-1, 2):
+                                pk = point[2] + k
+                                if pk <= 0 or pk > dimf: continue
+                                if (frame_flag[pi, pj, pk] == 0):
+                                    frame_flag[pi, pj, pk] = 1
+                                    queue.append((pi, pj, pk))
+        return model_float
+
+    def latent_step(self, z1, z2, step_size, layer):
+        '''
+        Computes the average derivative evaluated over the sample field
+
+        :param self:
+        :param z1:
+        :param z2:
+        :param step_size:
+        :return:
+        '''
+
+    def deep_dream(self, config):
+        '''
+        This function applies a gradient step to the latent vector z1 based on the difference of the activations
+        at layer x between z1 and z2, computed at surface points on z1
+
+        :param sefl:
+        :param config:
+        :return:
+        '''
+
+        # load previous checkpoint
+        # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
+        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
+        if os.path.exists(checkpoint_txt):
+            fin = open(checkpoint_txt)
+            model_dir = fin.readline().strip()
+            fin.close()
+            self.im_network.load_state_dict(torch.load(model_dir))
+            print(" [*] Load SUCCESS")
+        else:
+            print(" [!] Load failed...")
+            return
+
+        z1 = int(config.interpol_z1)
+        z2 = int(config.interpol_z2)
+        interpol_steps = int(config.interpol_steps)
+        result_base_directory = config.interpol_directory
+        result_dir_name = 'DeepDream_' + str(z1) + '_' + str(z2)
+        result_dir = config.interpol_directory + '/' + result_dir_name
+
+        # Create output directory
+        if not os.path.isdir(result_dir):
+            os.mkdir(result_dir)
+            print('creating directory ' + result_dir)
+
+        # get latent vectors from hdf5
+        # hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
+        # hdf5_file = h5py.File(hdf5_path, mode='r')
+        # num_z = hdf5_file["zs"].shape[0]
+
+        if z1 < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z1:z1 + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z1_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z1_vec = z1_vec_.detach().cpu().numpy()
+        else:
+            print(" z1 not a valid number")
+
+        if z2 < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z2:z2 + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z2_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z2_vec = z2_vec_.detach().cpu().numpy()
+        else:
+            print(" z2 not a valid number")
+
+        self.test_mesh_point(self, config)
+

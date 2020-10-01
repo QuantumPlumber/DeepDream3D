@@ -4,13 +4,17 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 
-from ModelDefinition.modelAE import IM_AE
-from ModelDefinition.modelSVR import IM_SVR
+from DeepDream3D.ModelDefinition.modelAE import IM_AE
+from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
+from DeepDream3D.ModelDefinition.modelAE_DD import IM_AE_DD
 
 import argparse
+import yaml
 import h5py
 
 parser = argparse.ArgumentParser()
+parser.add_argument("--yaml_config", action="store", dest="yaml_config", default=None, type=str,
+                    help="Optionally specify parameters with a yaml file. YAML file overrides command line args")
 parser.add_argument("--epoch", action="store", dest="epoch", default=0, type=int, help="Epoch to train [0]")
 parser.add_argument("--iteration", action="store", dest="iteration", default=0, type=int,
                     help="Iteration to train. Either epoch or iteration need to be zero [0]")
@@ -50,6 +54,22 @@ parser.add_argument("--interpol_steps", action="store", dest="interpol_steps", d
 
 FLAGS = parser.parse_args()
 
+# process yaml_file
+if FLAGS.yaml_config is not None:
+    with open(FLAGS.yaml_config, 'r') as stream:
+        try:
+            yaml_config = yaml.safe_load(stream)
+        except yaml.YAMLError as exc:
+            print(exc)
+
+    # overwrite command line FLAGS
+    command_string = []
+    for key, value in yaml_config.item():
+        command_string.append(key)
+        command_string.append(value)
+
+    FLAGS = parser.parse_args(args=command_string)
+
 if not os.path.exists(FLAGS.sample_dir):
     os.makedirs(FLAGS.sample_dir)
 
@@ -60,11 +80,10 @@ if FLAGS.ae:
         im_ae.train(FLAGS)
     elif FLAGS.getz:
         im_ae.get_z(FLAGS)
-    elif FLAGS.interpol:
-        im_ae.interpolate_z(FLAGS)
     else:
         # im_ae.test_mesh(FLAGS)
         im_ae.test_mesh_point(FLAGS)
+
 elif FLAGS.svr:
     im_svr = IM_SVR(FLAGS)
 
@@ -73,5 +92,14 @@ elif FLAGS.svr:
     else:
         # im_svr.test_mesh(FLAGS)
         im_svr.test_mesh_point(FLAGS)
+
+elif FLAGS.DeepDream:
+    im_ae_dd = IM_AE_DD(FLAGS)
+
+    if FLAGS.interpol:
+        IM_AE_DD.interpolate_z(FLAGS)
+    elif FLAGS.deepdream:
+        IM_AE_DD.deep_dream(FLAGS)
+
 else:
-    print("Please specify an operation: ae or svr?")
+    print("Please specify a model type?")

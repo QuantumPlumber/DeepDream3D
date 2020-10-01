@@ -14,109 +14,9 @@ from torch.autograd import Variable
 
 import mcubes
 
-from ModelDefinition.utils import *
+from .utils import *
 
-
-# pytorch 1.2.0 implementation
-
-
-class generator(nn.Module):
-    def __init__(self, z_dim, point_dim, gf_dim):
-        super(generator, self).__init__()
-        self.z_dim = z_dim
-        self.point_dim = point_dim
-        self.gf_dim = gf_dim
-        self.linear_1 = nn.Linear(self.z_dim + self.point_dim, self.gf_dim * 8, bias=True)
-        self.linear_2 = nn.Linear(self.gf_dim * 8, self.gf_dim * 8, bias=True)
-        self.linear_3 = nn.Linear(self.gf_dim * 8, self.gf_dim * 8, bias=True)
-        self.linear_4 = nn.Linear(self.gf_dim * 8, self.gf_dim * 4, bias=True)
-        self.linear_5 = nn.Linear(self.gf_dim * 4, self.gf_dim * 2, bias=True)
-        self.linear_6 = nn.Linear(self.gf_dim * 2, self.gf_dim * 1, bias=True)
-        self.linear_7 = nn.Linear(self.gf_dim * 1, 1, bias=True)
-        nn.init.normal_(self.linear_1.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.linear_1.bias, 0)
-        nn.init.normal_(self.linear_2.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.linear_2.bias, 0)
-        nn.init.normal_(self.linear_3.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.linear_3.bias, 0)
-        nn.init.normal_(self.linear_4.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.linear_4.bias, 0)
-        nn.init.normal_(self.linear_5.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.linear_5.bias, 0)
-        nn.init.normal_(self.linear_6.weight, mean=0.0, std=0.02)
-        nn.init.constant_(self.linear_6.bias, 0)
-        nn.init.normal_(self.linear_7.weight, mean=1e-5, std=0.02)
-        nn.init.constant_(self.linear_7.bias, 0)
-
-    def forward(self, points, z, is_training=False):
-        zs = z.view(-1, 1, self.z_dim).repeat(1, points.size()[1], 1)
-        pointz = torch.cat([points, zs], 2)
-
-        l1 = self.linear_1(pointz)
-        l1 = F.leaky_relu(l1, negative_slope=0.02, inplace=True)
-
-        l2 = self.linear_2(l1)
-        l2 = F.leaky_relu(l2, negative_slope=0.02, inplace=True)
-
-        l3 = self.linear_3(l2)
-        l3 = F.leaky_relu(l3, negative_slope=0.02, inplace=True)
-
-        l4 = self.linear_4(l3)
-        l4 = F.leaky_relu(l4, negative_slope=0.02, inplace=True)
-
-        l5 = self.linear_5(l4)
-        l5 = F.leaky_relu(l5, negative_slope=0.02, inplace=True)
-
-        l6 = self.linear_6(l5)
-        l6 = F.leaky_relu(l6, negative_slope=0.02, inplace=True)
-
-        l7 = self.linear_7(l6)
-
-        # l7 = torch.clamp(l7, min=0, max=1)
-        l7 = torch.max(torch.min(l7, l7 * 0.01 + 0.99), l7 * 0.01)
-
-        return l7
-
-
-class encoder(nn.Module):
-    def __init__(self, ef_dim, z_dim):
-        super(encoder, self).__init__()
-        self.ef_dim = ef_dim
-        self.z_dim = z_dim
-        self.conv_1 = nn.Conv3d(1, self.ef_dim, 4, stride=2, padding=1, bias=False)
-        self.in_1 = nn.InstanceNorm3d(self.ef_dim)
-        self.conv_2 = nn.Conv3d(self.ef_dim, self.ef_dim * 2, 4, stride=2, padding=1, bias=False)
-        self.in_2 = nn.InstanceNorm3d(self.ef_dim * 2)
-        self.conv_3 = nn.Conv3d(self.ef_dim * 2, self.ef_dim * 4, 4, stride=2, padding=1, bias=False)
-        self.in_3 = nn.InstanceNorm3d(self.ef_dim * 4)
-        self.conv_4 = nn.Conv3d(self.ef_dim * 4, self.ef_dim * 8, 4, stride=2, padding=1, bias=False)
-        self.in_4 = nn.InstanceNorm3d(self.ef_dim * 8)
-        self.conv_5 = nn.Conv3d(self.ef_dim * 8, self.z_dim, 4, stride=1, padding=0, bias=True)
-        nn.init.xavier_uniform_(self.conv_1.weight)
-        nn.init.xavier_uniform_(self.conv_2.weight)
-        nn.init.xavier_uniform_(self.conv_3.weight)
-        nn.init.xavier_uniform_(self.conv_4.weight)
-        nn.init.xavier_uniform_(self.conv_5.weight)
-        nn.init.constant_(self.conv_5.bias, 0)
-
-    def forward(self, inputs, is_training=False):
-        d_1 = self.in_1(self.conv_1(inputs))
-        d_1 = F.leaky_relu(d_1, negative_slope=0.02, inplace=True)
-
-        d_2 = self.in_2(self.conv_2(d_1))
-        d_2 = F.leaky_relu(d_2, negative_slope=0.02, inplace=True)
-
-        d_3 = self.in_3(self.conv_3(d_2))
-        d_3 = F.leaky_relu(d_3, negative_slope=0.02, inplace=True)
-
-        d_4 = self.in_4(self.conv_4(d_3))
-        d_4 = F.leaky_relu(d_4, negative_slope=0.02, inplace=True)
-
-        d_5 = self.conv_5(d_4)
-        d_5 = d_5.view(-1, self.z_dim)
-        d_5 = torch.sigmoid(d_5)
-
-        return d_5
+import DeepDream3D.ModelDefinition.base_model as base_model
 
 
 class im_network(nn.Module):
@@ -126,8 +26,8 @@ class im_network(nn.Module):
         self.gf_dim = gf_dim
         self.z_dim = z_dim
         self.point_dim = point_dim
-        self.encoder = encoder(self.ef_dim, self.z_dim)
-        self.generator = generator(self.z_dim, self.point_dim, self.gf_dim)
+        self.encoder = base_model.encoder(self.ef_dim, self.z_dim)
+        self.generator = base_model.generator(self.z_dim, self.point_dim, self.gf_dim)
 
     def forward(self, inputs, z_vector, point_coord, is_training=False):
         if is_training:
@@ -144,57 +44,14 @@ class im_network(nn.Module):
         return z_vector, net_out
 
 
-class IM_AE(object):
+# pytorch 1.2.0 implementation
+
+class IM_AE(base_model.BASE_MODEL):
     def __init__(self, config):
-        # progressive training
-        # 1-- (16, 16*16*16)
-        # 2-- (32, 16*16*16)
-        # 3-- (64, 16*16*16*4)
-        self.sample_vox_size = config.sample_vox_size
-        if self.sample_vox_size == 16:
-            self.load_point_batch_size = 16 * 16 * 16
-            self.point_batch_size = 16 * 16 * 16
-            self.shape_batch_size = 32
-        elif self.sample_vox_size == 32:
-            self.load_point_batch_size = 16 * 16 * 16
-            self.point_batch_size = 16 * 16 * 16
-            self.shape_batch_size = 32
-        elif self.sample_vox_size == 64:
-            self.load_point_batch_size = 16 * 16 * 16 * 4
-            self.point_batch_size = 16 * 16 * 16
-            self.shape_batch_size = 32
-        self.input_size = 64  # input voxel grid size
+        super().__init__(config)
 
-        self.ef_dim = 32
-        self.gf_dim = 128
-        self.z_dim = 256
-        self.point_dim = 3
-
-        self.dataset_name = config.dataset
-        self.dataset_load = self.dataset_name + '_train'
-        if not (config.train or config.getz):
-            self.dataset_load = self.dataset_name + '_test'
-        self.checkpoint_dir = config.checkpoint_dir
-        self.data_dir = config.data_dir
-
-        data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
-        if os.path.exists(data_hdf5_name):
-            data_dict = h5py.File(data_hdf5_name, 'r')
-            self.data_points = (data_dict['points_' + str(self.sample_vox_size)][:].astype(
-                np.float32) + 0.5) / 256 - 0.5
-            self.data_values = data_dict['values_' + str(self.sample_vox_size)][:].astype(np.float32)
-            self.data_voxels = data_dict['voxels'][:]
-            # reshape to NCHW
-            self.data_voxels = np.reshape(self.data_voxels, [-1, 1, self.input_size, self.input_size, self.input_size])
-        else:
-            print("error: cannot load " + data_hdf5_name)
-            exit(0)
-
-        if torch.cuda.is_available():
-            self.device = torch.device('cuda')
-            torch.backends.cudnn.benchmark = True
-        else:
-            self.device = torch.device('cpu')
+        # load data
+        self.load_data()
 
         # build model
         self.im_network = im_network(self.ef_dim, self.gf_dim, self.z_dim, self.point_dim)
@@ -202,8 +59,10 @@ class IM_AE(object):
         # print params
         # for param_tensor in self.im_network.state_dict():
         #	print(param_tensor, "\t", self.im_network.state_dict()[param_tensor].size())
+
         self.optimizer = torch.optim.Adam(self.im_network.parameters(), lr=config.learning_rate,
-                                          betas=(config.beta1, 0.999))
+                                           betas=(config.beta1, 0.999))
+
         # pytorch does not have a checkpoint manager
         # have to define it myself to manage max num of checkpoints to keep
         self.max_to_keep = 2
@@ -218,85 +77,23 @@ class IM_AE(object):
 
         self.loss = network_loss
 
-        # keep everything a power of 2
-        self.cell_grid_size = 4
-        self.frame_grid_size = 64
-        self.real_size = self.cell_grid_size * self.frame_grid_size  # =256, output point-value voxel grid size in testing
-        self.test_size = 32  # related to testing batch_size, adjust according to gpu memory size
-        self.test_point_batch_size = self.test_size * self.test_size * self.test_size  # do not change
-
-        # get coords for training
-        dima = self.test_size
-        dim = self.frame_grid_size
-        self.aux_x = np.zeros([dima, dima, dima], np.uint8)
-        self.aux_y = np.zeros([dima, dima, dima], np.uint8)
-        self.aux_z = np.zeros([dima, dima, dima], np.uint8)
-        multiplier = int(dim / dima)
-        multiplier2 = multiplier * multiplier
-        multiplier3 = multiplier * multiplier * multiplier
-        for i in range(dima):
-            for j in range(dima):
-                for k in range(dima):
-                    self.aux_x[i, j, k] = i * multiplier
-                    self.aux_y[i, j, k] = j * multiplier
-                    self.aux_z[i, j, k] = k * multiplier
-        self.coords = np.zeros([multiplier3, dima, dima, dima, 3], np.float32)
-        for i in range(multiplier):
-            for j in range(multiplier):
-                for k in range(multiplier):
-                    self.coords[i * multiplier2 + j * multiplier + k, :, :, :, 0] = self.aux_x + i
-                    self.coords[i * multiplier2 + j * multiplier + k, :, :, :, 1] = self.aux_y + j
-                    self.coords[i * multiplier2 + j * multiplier + k, :, :, :, 2] = self.aux_z + k
-        self.coords = (self.coords.astype(np.float32) + 0.5) / dim - 0.5
-        self.coords = np.reshape(self.coords, [multiplier3, self.test_point_batch_size, 3])
-        self.coords = torch.from_numpy(self.coords)
-        self.coords = self.coords.to(self.device)
-
-        # get coords for testing
-        dimc = self.cell_grid_size
-        dimf = self.frame_grid_size
-        self.cell_x = np.zeros([dimc, dimc, dimc], np.int32)
-        self.cell_y = np.zeros([dimc, dimc, dimc], np.int32)
-        self.cell_z = np.zeros([dimc, dimc, dimc], np.int32)
-        self.cell_coords = np.zeros([dimf, dimf, dimf, dimc, dimc, dimc, 3], np.float32)
-        self.frame_coords = np.zeros([dimf, dimf, dimf, 3], np.float32)
-        self.frame_x = np.zeros([dimf, dimf, dimf], np.int32)
-        self.frame_y = np.zeros([dimf, dimf, dimf], np.int32)
-        self.frame_z = np.zeros([dimf, dimf, dimf], np.int32)
-        for i in range(dimc):
-            for j in range(dimc):
-                for k in range(dimc):
-                    self.cell_x[i, j, k] = i
-                    self.cell_y[i, j, k] = j
-                    self.cell_z[i, j, k] = k
-        for i in range(dimf):
-            for j in range(dimf):
-                for k in range(dimf):
-                    self.cell_coords[i, j, k, :, :, :, 0] = self.cell_x + i * dimc
-                    self.cell_coords[i, j, k, :, :, :, 1] = self.cell_y + j * dimc
-                    self.cell_coords[i, j, k, :, :, :, 2] = self.cell_z + k * dimc
-                    self.frame_coords[i, j, k, 0] = i
-                    self.frame_coords[i, j, k, 1] = j
-                    self.frame_coords[i, j, k, 2] = k
-                    self.frame_x[i, j, k] = i
-                    self.frame_y[i, j, k] = j
-                    self.frame_z[i, j, k] = k
-        self.cell_coords = (self.cell_coords.astype(np.float32) + 0.5) / self.real_size - 0.5
-        self.cell_coords = np.reshape(self.cell_coords, [dimf, dimf, dimf, dimc * dimc * dimc, 3])
-        self.cell_x = np.reshape(self.cell_x, [dimc * dimc * dimc])
-        self.cell_y = np.reshape(self.cell_y, [dimc * dimc * dimc])
-        self.cell_z = np.reshape(self.cell_z, [dimc * dimc * dimc])
-        self.frame_x = np.reshape(self.frame_x, [dimf * dimf * dimf])
-        self.frame_y = np.reshape(self.frame_y, [dimf * dimf * dimf])
-        self.frame_z = np.reshape(self.frame_z, [dimf * dimf * dimf])
-        self.frame_coords = (self.frame_coords.astype(np.float32) + 0.5) / dimf - 0.5
-        self.frame_coords = np.reshape(self.frame_coords, [dimf * dimf * dimf, 3])
-
-        self.sampling_threshold = 0.5  # final marching cubes threshold
-
     @property
     def model_dir(self):
         return "{}_ae_{}".format(self.dataset_name, self.input_size)
+
+    def load_data(self):
+        data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
+        if os.path.exists(data_hdf5_name):
+            data_dict = h5py.File(data_hdf5_name, 'r')
+            self.data_points = (data_dict['points_' + str(self.sample_vox_size)][:].astype(
+                np.float32) + 0.5) / 256 - 0.5
+            self.data_values = data_dict['values_' + str(self.sample_vox_size)][:].astype(np.float32)
+            self.data_voxels = data_dict['voxels'][:]
+            # reshape to NCHW
+            self.data_voxels = np.reshape(self.data_voxels, [-1, 1, self.input_size, self.input_size, self.input_size])
+        else:
+            print("error: cannot load " + data_hdf5_name)
+            exit(0)
 
     def train(self, config):
         # load previous checkpoint
@@ -665,85 +462,6 @@ class IM_AE(object):
             vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
             vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
             # vertices = self.optimize_mesh(vertices,model_z)
-            write_ply(config.sample_dir + "/" + "out" + str(t) + ".ply", vertices, triangles)
+            write_ply_triangle(config.sample_dir + "/" + "out" + str(t) + ".ply", vertices, triangles)
 
             print("[sample Z]")
-
-    def interpolate_z(self, config):
-        # load previous checkpoint
-        # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-            return
-
-        z1 = int(config.interpol_z1)
-        z2 = int(config.interpol_z2)
-        interpol_steps = int(config.interpol_steps)
-        result_base_directory = config.interpol_directory
-        result_dir_name = 'interpol_' + str(z1) + '_' + str(z2)
-        result_dir = config.interpol_directory + '/' + result_dir_name
-
-        # Create output directory
-        if not os.path.isdir(result_dir):
-            os.mkdir(result_dir)
-            print('creating directory ' + result_dir)
-
-        # get latent vectors from hdf5
-        # hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
-        # hdf5_file = h5py.File(hdf5_path, mode='r')
-        # num_z = hdf5_file["zs"].shape[0]
-
-        if z1 < len(self.data_voxels):
-            batch_voxels = self.data_voxels[z1:z1 + 1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
-            z1_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
-            z1_vec = z1_vec_.detach().cpu().numpy()
-        else:
-            print(" z1 not a valid number")
-
-        if z2 < len(self.data_voxels):
-            batch_voxels = self.data_voxels[z2:z2 + 1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
-            z2_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
-            z2_vec = z2_vec_.detach().cpu().numpy()
-        else:
-            print(" z2 not a valid number")
-
-        # compute linear interpolation between vectors
-        fraction = np.linspace(0, 1, interpol_steps)
-        interpolated_z = np.multiply.outer(np.ones_like(fraction), z1_vec) + np.multiply.outer(fraction,
-                                                                                               z2_vec - z1_vec)
-        interpolated_z = interpolated_z.astype(np.float64)
-
-        for z_index in np.arange(interpol_steps):
-            start_time = time.time()
-            model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
-            # print('current latent vector:')
-            # print(model_z)
-
-            model_z = torch.from_numpy(model_z).float()
-            model_z = model_z.to(self.device)
-            model_float = self.z2voxel(model_z)
-            # img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
-            # img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
-            # img3 = np.clip(np.amax(model_float, axis=2)*256, 0,255).astype(np.uint8)
-            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_1t.png",img1)
-            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_2t.png",img2)
-            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_3t.png",img3)
-
-            vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
-            vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
-            # vertices = self.optimize_mesh(vertices,model_z)
-            write_ply_triangle(result_dir + "/" + "out_" + str(z_index) + ".ply", vertices, triangles)
-
-            end_time = time.time() - start_time
-            print("computed interpolation {} in {} seconds".format(z_index, end_time))
