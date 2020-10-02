@@ -1,0 +1,1 @@
+python ../Insight_Project_Framework/main.py '../configs/deepdream.yml'

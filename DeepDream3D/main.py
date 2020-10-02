@@ -7,11 +7,12 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import numpy as np
 
-from DeepDream3D.ModelDefinition.modelAE import IM_AE
-from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
-from DeepDream3D.ModelDefinition.modelAE_DD import IM_AE_DD
+#from DeepDream3D.ModelDefinition.modelAE import IM_AE
+#from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
+#from DeepDream3D.ModelDefinition.modelAE_DD import IM_AE_DD
 
 parser = argparse.ArgumentParser(conflict_handler='resolve')
+
 # --------------- specify yml config -------------------------------
 
 # parser.add_argument("--yaml_config", action="store", dest="yaml_config", default=None, type=str,
@@ -100,6 +101,7 @@ if sys.argv[1] is not None:
             command_string.append(str(value))
     FLAGS = parser.parse_args(args=command_string)
 
+'''
 if not os.path.exists(FLAGS.sample_dir):
     os.makedirs(FLAGS.sample_dir)
 
@@ -133,3 +135,4 @@ elif FLAGS.deepdream:
 
 else:
     print("Please specify a model type?")
+'''

@@ -294,7 +294,7 @@ class IM_AE_DD(IM_AE):
             # accumulate the gradient over the whole volume
             grad = self.latent_gradient(z1_vec, z2_vec, step, config)
 
-            z1_vec += grad * self.dream_rate
+            z1_vec += grad / grad.norm() * self.dream_rate
 
             end_time = time.perf_counter()
             print('Completed dream {} in {} seconds'.format(step, end_time - start_time))

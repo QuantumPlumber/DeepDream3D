@@ -15,7 +15,7 @@
 deepdream: null
 
 # --------------- specify model mode-------------------------------
-# Choose one, no choice defaults to test
+# Choose one, no choice produces default behavior of each model
 
 # True for training
 #train: null
@@ -52,25 +52,25 @@ end: 16
 dataset: "all_vox256_img"
 
 # Directory name to save the checkpoints
-checkpoint_dir: "checkpoint"
+checkpoint_dir: "/data/IM-NET-pytorch/checkpoint"
 
 # Root directory of dataset [data]
-data_dir: "./data/all_vox256_img/"
+data_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
 
 # Directory for image samples
 sample_dir: "./samples/"
 
 # Directory to store interpolation results
-interpol_directory: 'null'
+interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 # --------------- Interpolation -------------------------------
 
 
 # First Interpolation latent vector
-interpol_z1: 1
+interpol_z1: 100
 
 # Second Interpolation latent vector
-interpol_z2: 10
+interpol_z2: 3000
 
 # number of steps to take between values
 interpol_steps: 5
@@ -79,3 +79,6 @@ interpol_steps: 5
 
 #layer number to interpolate
 layer_num: 3
+
+"dream update rate"
+dream_rate: .01
