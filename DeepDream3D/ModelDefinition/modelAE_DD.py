@@ -43,7 +43,7 @@ class IM_AE_DD(IM_AE):
             z_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
             z_vec = z_vec_.detach().cpu().numpy()
 
-            return (z_num)
+            return (z_vec)
 
         else:
             print("z_num not a valid number")
@@ -90,7 +90,7 @@ class IM_AE_DD(IM_AE):
             start_time = time.time()
             model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
             # print('current latent vector:')
-            # print(model_z)
+            print(model_z.shape)
 
             model_z = torch.from_numpy(model_z).float()
             model_z = model_z.to(self.device)
@@ -122,7 +122,7 @@ class IM_AE_DD(IM_AE):
         '''
 
         # make sure z_base will accumulate gradients
-        z_base.requires_grad = True
+        #z_base.requires_grad = True
         # make sure gradients are set to zero to begin with.
         self.im_network.zero_grad()
 
@@ -204,8 +204,17 @@ class IM_AE_DD(IM_AE):
             # Now compute the gradient
             # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
             # gradient = torch.from_numpy(gradient_).to(self.device)
-            loss = 1 - torch.exp(-torch.pow(style_activation - base_activation, 2))
+
+            # no need to track gradient for these operations
+            with torch.no_grad():
+                mantissa = style_activation - base_activation
+                mantissa = torch.abs(mantissa/(mantissa.norm()))
+                #print(mantissa)
+                loss = torch.exp(-mantissa)
+
             base_activation.backward(loss)
+
+            print(z_base.grad)
 
             # Store gradient
             # batch_grad = z_base.grad
@@ -240,7 +249,7 @@ class IM_AE_DD(IM_AE):
         vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
         vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
         # vertices = self.optimize_mesh(vertices,model_z)
-        write_ply_triangle(config.sample_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
+        write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
         return z_base.grad
 
@@ -274,27 +283,32 @@ class IM_AE_DD(IM_AE):
         interpol_steps = int(config.interpol_steps)
         result_base_directory = config.interpol_directory
         result_dir_name = 'DeepDream_' + str(z1) + '_' + str(z2)
-        result_dir = result_base_directory + '/' + result_dir_name
+        self.result_dir = result_base_directory + '/' + result_dir_name
 
         # Create output directory
         # TODO: re-create directory
-        if not os.path.isdir(result_dir):
-            os.mkdir(result_dir)
-            print('creating directory ' + result_dir)
+        if not os.path.isdir(self.result_dir):
+            os.mkdir(self.result_dir)
+            print('creating directory ' + self.result_dir)
 
         # get z vectors from forward pass of encoder
 
-        # z1_vec = self.get_zvec(z1)
-        z1_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
-        # z2_vec = self.get_zvec(z1)
-        z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
+        # TODO: comment out dummy data
+        z1_vec_ = torch.from_numpy(self.get_zvec(z1)).float().to(self.device)
+        #z1_vec_ = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
+        z1_vec = torch.autograd.Variable(z1_vec_, requires_grad=True)
+
+        z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
+        #z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
 
         for step in range(config.interpol_steps):
             start_time = time.perf_counter()
             # accumulate the gradient over the whole volume
             grad = self.latent_gradient(z1_vec, z2_vec, step, config)
 
-            z1_vec += grad / grad.norm() * self.dream_rate
+            print(grad)
+
+            z1_vec.data += grad.data / (grad.data.norm() + .01) * self.dream_rate
 
             end_time = time.perf_counter()
             print('Completed dream {} in {} seconds'.format(step, end_time - start_time))

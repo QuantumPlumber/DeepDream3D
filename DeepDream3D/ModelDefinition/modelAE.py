@@ -53,7 +53,8 @@ class IM_AE(base_model.BaseModel):
         self.ef_dim = 32
 
         # load data
-        #self.load_data()
+        #TODO: uncomment this
+        self.load_data()
 
         # build model
         self.im_network = im_network(self.ef_dim, self.gf_dim, self.z_dim, self.point_dim)

@@ -1,1 +1,2 @@
-python ../Insight_Project_Framework/main.py '../configs/deepdream.yml'
+cd ../
+python -m DeepDream3D configs/deepdream.yml

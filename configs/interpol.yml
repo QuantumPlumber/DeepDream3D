@@ -24,7 +24,7 @@ deepdream: null
 #getz: null
 
 # True for interpolating latent codes
-#interpol: null
+interpol: null
 
 
 # --------------- training -------------------------------
@@ -67,7 +67,7 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 10
+interpol_z1: 11
 
 # Second Interpolation latent vector
 interpol_z2: 1000
@@ -81,4 +81,4 @@ interpol_steps: 5
 layer_num: 3
 
 # dream update rate
-dream_rate: .00
+dream_rate: .0
