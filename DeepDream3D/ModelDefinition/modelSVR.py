@@ -53,56 +53,16 @@ class IM_SVR(base_model.BaseModel):
         self.input_size = 64  # input voxel grid size
 
         self.img_ef_dim = 64
-        self.gf_dim = 128
-        self.z_dim = 256
-        self.point_dim = 3
 
         # actual batch size
         self.shape_batch_size = 64
 
-        self.view_size = 137
-        self.crop_size = 128
-        self.view_num = 24
-        self.crop_edge = self.view_size - self.crop_size
-        self.test_idx = 23
-
-        self.dataset_name = config.dataset
-        self.dataset_load = self.dataset_name + '_train'
-        if not config.train:
-            self.dataset_load = self.dataset_name + '_test'
-        self.checkpoint_dir = config.checkpoint_dir
-        self.data_dir = config.data_dir
-
-        data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
-        if os.path.exists(data_hdf5_name):
-            data_dict = h5py.File(data_hdf5_name, 'r')
-            offset_x = int(self.crop_edge / 2)
-            offset_y = int(self.crop_edge / 2)
-            # reshape to NCHW
-            self.data_pixels = np.reshape(
-                data_dict['pixels'][:, :, offset_y:offset_y + self.crop_size, offset_x:offset_x + self.crop_size],
-                [-1, self.view_num, 1, self.crop_size, self.crop_size])
-        else:
-            print("error: cannot load " + data_hdf5_name)
-            exit(0)
-        if config.train:
-            dataz_hdf5_name = self.checkpoint_dir + '/' + self.modelAE_dir + '/' + self.dataset_name + '_train_z.hdf5'
-            if os.path.exists(dataz_hdf5_name):
-                dataz_dict = h5py.File(dataz_hdf5_name, 'r')
-                self.data_zs = dataz_dict['zs'][:]
-            else:
-                print("error: cannot load " + dataz_hdf5_name)
-                exit(0)
-            if len(self.data_zs) != len(self.data_pixels):
-                print("error: len(self.data_zs) != len(self.data_pixels)")
-                print(len(self.data_zs), len(self.data_pixels))
-                exit(0)
+        # load the data
+        self.load_data(self, config)
 
         if torch.cuda.is_available():
-            self.device = torch.device('cuda')
             torch.backends.cudnn.benchmark = True
-        else:
-            self.device = torch.device('cpu')
+
 
         # build model
         self.im_network = im_network(self.img_ef_dim, self.gf_dim, self.z_dim, self.point_dim)
@@ -139,6 +99,37 @@ class IM_SVR(base_model.BaseModel):
     def modelAE_dir(self):
         return "{}_ae_{}".format(
             self.dataset_name, self.input_size)
+
+    def load_data(self, config):
+        self.view_size = 137
+        self.crop_size = 128
+        self.view_num = 24
+        self.crop_edge = self.view_size - self.crop_size
+        self.test_idx = 23
+        data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
+        if os.path.exists(data_hdf5_name):
+            data_dict = h5py.File(data_hdf5_name, 'r')
+            offset_x = int(self.crop_edge / 2)
+            offset_y = int(self.crop_edge / 2)
+            # reshape to NCHW
+            self.data_pixels = np.reshape(
+                data_dict['pixels'][:, :, offset_y:offset_y + self.crop_size, offset_x:offset_x + self.crop_size],
+                [-1, self.view_num, 1, self.crop_size, self.crop_size])
+        else:
+            print("error: cannot load " + data_hdf5_name)
+            exit(0)
+        if config.train:
+            dataz_hdf5_name = self.checkpoint_dir + '/' + self.modelAE_dir + '/' + self.dataset_name + '_train_z.hdf5'
+            if os.path.exists(dataz_hdf5_name):
+                dataz_dict = h5py.File(dataz_hdf5_name, 'r')
+                self.data_zs = dataz_dict['zs'][:]
+            else:
+                print("error: cannot load " + dataz_hdf5_name)
+                exit(0)
+            if len(self.data_zs) != len(self.data_pixels):
+                print("error: len(self.data_zs) != len(self.data_pixels)")
+                print(len(self.data_zs), len(self.data_pixels))
+                exit(0)
 
     def train(self, config):
         # load AE weights

@@ -1,19 +1,18 @@
 
-# Configuration file for running experiments.
-# This is the preferred method for sending configuration information.
-# values specified here override values handed to the command line parser.
+# Configuration file for running deep dream experiments.
+#
 
 # --------------- specify model architecture-------------------------------
 # Choose one
 
 # True for ae [False]
-ae: null
+#ae: null
 
 # True for svr
 #svr: null
 
 # True for deepdream
-#deepdream: null
+deepdream: null
 
 # --------------- specify model mode-------------------------------
 # Choose one, no choice defaults to test
@@ -75,3 +74,8 @@ interpol_z2: 10
 
 # number of steps to take between values
 interpol_steps: 5
+
+# --------------- deepdream -------------------------------
+
+#layer number to interpolate
+layer_num: 3

@@ -127,6 +127,7 @@ class encoder(nn.Module):
 
         return d_5
 
+
 class resnet_block(nn.Module):
     def __init__(self, dim_in, dim_out):
         super(resnet_block, self).__init__()
@@ -237,10 +238,10 @@ class BaseModel(object):
             self.shape_batch_size = 32
         self.input_size = 64  # input voxel grid size
 
-        self.ef_dim = 32
         self.gf_dim = 128
         self.z_dim = 256
         self.point_dim = 3
+
 
         self.dataset_name = config.dataset
         self.dataset_load = self.dataset_name + '_train'
@@ -260,6 +261,7 @@ class BaseModel(object):
         self.cell_grid_size = 4
         self.frame_grid_size = 64
         self.real_size = self.cell_grid_size * self.frame_grid_size  # =256, output point-value voxel grid size in testing
+        #TODO revert back to 32
         self.test_size = 32  # related to testing batch_size, adjust according to gpu memory size
         self.test_point_batch_size = self.test_size * self.test_size * self.test_size  # do not change
 

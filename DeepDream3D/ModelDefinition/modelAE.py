@@ -46,12 +46,14 @@ class im_network(nn.Module):
 
 # pytorch 1.2.0 implementation
 
-class IM_AE(base_model.BASE_MODEL):
+class IM_AE(base_model.BaseModel):
     def __init__(self, config):
         super().__init__(config)
 
+        self.ef_dim = 32
+
         # load data
-        self.load_data()
+        #self.load_data()
 
         # build model
         self.im_network = im_network(self.ef_dim, self.gf_dim, self.z_dim, self.point_dim)
@@ -95,7 +97,7 @@ class IM_AE(base_model.BASE_MODEL):
             print("error: cannot load " + data_hdf5_name)
             exit(0)
 
-    def train(self, config):
+    def load_checkpoint(self):
         # load previous checkpoint
         checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
         if os.path.exists(checkpoint_txt):
@@ -104,8 +106,15 @@ class IM_AE(base_model.BASE_MODEL):
             fin.close()
             self.im_network.load_state_dict(torch.load(model_dir))
             print(" [*] Load SUCCESS")
+            return
         else:
             print(" [!] Load failed...")
+            exit(0)
+
+
+    def train(self, config):
+        # load previous checkpoint
+        self.load_checkpoint()
 
         shape_num = len(self.data_voxels)
         batch_index_list = np.arange(shape_num)
@@ -346,16 +355,7 @@ class IM_AE(base_model.BASE_MODEL):
     # output shape as ply
     def test_mesh(self, config):
         # load previous checkpoint
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-            return
+        self.load_checkpoint()
 
         self.im_network.eval()
         for t in range(config.start, min(len(self.data_voxels), config.end)):
@@ -376,16 +376,7 @@ class IM_AE(base_model.BASE_MODEL):
     def test_mesh_point(self, config):
         # load previous checkpoint
         # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-            return
+        self.load_checkpoint()
 
         self.im_network.eval()
         for t in range(config.start, min(len(self.data_voxels), config.end)):
@@ -411,16 +402,7 @@ class IM_AE(base_model.BASE_MODEL):
 
     def get_z(self, config):
         # load previous checkpoint
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-            return
+        self.load_checkpoint()
 
         hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
         shape_num = len(self.data_voxels)

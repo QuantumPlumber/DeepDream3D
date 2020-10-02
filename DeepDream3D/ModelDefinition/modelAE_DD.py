@@ -12,17 +12,41 @@ import torch.nn.functional as F
 from torch import optim
 from torch.autograd import Variable
 
-
-
 import mcubes
 
 from .utils import *
 from .modelAE import IM_AE
 
+
 class IM_AE_DD(IM_AE):
     def __init__(self, config):
         super().__init__(config)
 
+    def get_activation(self, output_list):
+        '''
+        A wrapper function to establish teh forward hook
+
+        :param out:
+        :return:
+        '''
+
+        def hook(model, input, output):
+            output_list[0] = output
+
+        return hook
+
+    def get_zvec(self, z_num):
+        if z_num < len(self.data_voxels):
+            batch_voxels = self.data_voxels[z_num:z_num + 1].astype(np.float32)
+            batch_voxels = torch.from_numpy(batch_voxels)
+            batch_voxels = batch_voxels.to(self.device)
+            z_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
+            z_vec = z_vec_.detach().cpu().numpy()
+
+            return (z_num)
+
+        else:
+            print("z_num not a valid number")
 
     def interpolate_z(self, config):
         '''
@@ -31,18 +55,9 @@ class IM_AE_DD(IM_AE):
         :param config:
         :return:
         '''
+
         # load previous checkpoint
-        # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-            return
+        self.load_checkpoint()
 
         z1 = int(config.interpol_z1)
         z2 = int(config.interpol_z2)
@@ -61,23 +76,9 @@ class IM_AE_DD(IM_AE):
         # hdf5_file = h5py.File(hdf5_path, mode='r')
         # num_z = hdf5_file["zs"].shape[0]
 
-        if z1 < len(self.data_voxels):
-            batch_voxels = self.data_voxels[z1:z1 + 1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
-            z1_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
-            z1_vec = z1_vec_.detach().cpu().numpy()
-        else:
-            print(" z1 not a valid number")
-
-        if z2 < len(self.data_voxels):
-            batch_voxels = self.data_voxels[z2:z2 + 1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
-            z2_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
-            z2_vec = z2_vec_.detach().cpu().numpy()
-        else:
-            print(" z2 not a valid number")
+        # get the z vectors via forward pass through encoder
+        z1_vec = self.get_zvec(z1)
+        z2_vec = self.get_zvec(z1)
 
         # compute linear interpolation between vectors
         fraction = np.linspace(0, 1, interpol_steps)
@@ -109,7 +110,7 @@ class IM_AE_DD(IM_AE):
             end_time = time.time() - start_time
             print("computed interpolation {} in {} seconds".format(z_index, end_time))
 
-    def latent_gradient(self, z_base, z_target, encoder_layer):
+    def latent_gradient(self, z_base, z_target, step, config):
         '''
         Computes the average derivative evaluated over the sample field
 
@@ -125,10 +126,12 @@ class IM_AE_DD(IM_AE):
         # make sure gradients are set to zero to begin with.
         self.im_network.zero_grad()
 
+        # create a numpy array to store accumulated derivatives
+        accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
-        dimf = self.frame_grid_size # coarse model evaluation
+        dimf = self.frame_grid_size  # coarse model evaluation
 
         frame_flag = np.zeros([dimf + 2, dimf + 2, dimf + 2], np.uint8)
         queue = []
@@ -142,8 +145,12 @@ class IM_AE_DD(IM_AE):
             point_coord = np.expand_dims(point_coord, axis=0)
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
+
             _, model_out_ = self.im_network(None, z_base, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
+            # TODO: remove dummy data
+            # model_out = np.random.random(size=[1, 4096, 1])
+
             x_coords = self.frame_x[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
             y_coords = self.frame_y[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
             z_coords = self.frame_z[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
@@ -151,7 +158,7 @@ class IM_AE_DD(IM_AE):
                 (model_out > self.sampling_threshold).astype(np.uint8), [self.test_point_batch_size])
 
         # get queue and fill up ones
-        # This puts together a que of frame points to compute values for.
+        # This puts together a que of frame points to compute values.
         for i in range(1, dimf + 1):
             for j in range(1, dimf + 1):
                 for k in range(1, dimf + 1):
@@ -166,10 +173,13 @@ class IM_AE_DD(IM_AE):
                         model_float[x_coords + 1, y_coords + 1, z_coords + 1] = 1.0
 
         print("running queue:", len(queue))
+        que_len = len(queue)
         cell_batch_size = dimc ** 3
         cell_batch_num = int(self.test_point_batch_size / cell_batch_size)
         assert cell_batch_num > 0
         # run queue
+        iter_num = 0
+        total_iter = len(queue) // cell_batch_num
         while len(queue) > 0:
             batch_num = min(len(queue), cell_batch_num)
             point_list = []
@@ -184,19 +194,22 @@ class IM_AE_DD(IM_AE):
             cell_coords = cell_coords.to(self.device)
 
             # Call the model on the target to get target encoder layer
-            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=True)
-            target_layer = self.im_network.generator.linear_3.detatch().cpu().numpy
+            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            style_activation = self.target_activation[0]
 
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
-            _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=True)
-            base_layer = self.im_network.generator.linear_3.detatch().cpu().numpy
+            _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
+            base_activation = self.target_activation[0]
 
             # Now compute the gradient
-            gradient = np.tanh(np.abs((target_layer + base_layer) / (target_layer-base_layer)))
-            self.im_network.generator.linear_3.backward(gradient=gradient)
+            # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
+            # gradient = torch.from_numpy(gradient_).to(self.device)
+            loss = 1 - torch.exp(-torch.pow(style_activation - base_activation, 2))
+            base_activation.backward(loss)
 
-            # set the gradient and backpropagate
-
+            # Store gradient
+            # batch_grad = z_base.grad
+            # accumulated_grad += batch_grad.detach().cpu().numpy() / que_len
 
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
@@ -220,18 +233,16 @@ class IM_AE_DD(IM_AE):
                                 if (frame_flag[pi, pj, pk] == 0):
                                     frame_flag[pi, pj, pk] = 1
                                     queue.append((pi, pj, pk))
-        return model_float
 
-    def latent_step(self, z1, z2, step_size, layer):
-        '''
-        Computes the average derivative evaluated over the sample field
+            print('iteration {} of {} completed'.format(iter_num, total_iter))
+            iter_num += 1
 
-        :param self:
-        :param z1:
-        :param z2:
-        :param step_size:
-        :return:
-        '''
+        vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+        vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+        # vertices = self.optimize_mesh(vertices,model_z)
+        write_ply_triangle(config.sample_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
+
+        return z_base.grad
 
     def deep_dream(self, config):
         '''
@@ -244,52 +255,48 @@ class IM_AE_DD(IM_AE):
         '''
 
         # load previous checkpoint
-        # This checkpoint file records the most recent checkpoint.. otherwise there is no record.
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-        else:
-            print(" [!] Load failed...")
-            return
+        self.load_checkpoint()
 
+        #
+        self.dream_rate = config.dream_rate
+
+        # Set up forward hook to pull values
+        self.layer_num = config.layer_num
+        # this is the way to get the actual model variable
+        self.target_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
+        self.target_activation = [None]
+
+        self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
+
+        # get config values
         z1 = int(config.interpol_z1)
         z2 = int(config.interpol_z2)
         interpol_steps = int(config.interpol_steps)
         result_base_directory = config.interpol_directory
         result_dir_name = 'DeepDream_' + str(z1) + '_' + str(z2)
-        result_dir = config.interpol_directory + '/' + result_dir_name
+        result_dir = result_base_directory + '/' + result_dir_name
 
         # Create output directory
+        # TODO: re-create directory
         if not os.path.isdir(result_dir):
             os.mkdir(result_dir)
             print('creating directory ' + result_dir)
 
-        # get latent vectors from hdf5
-        # hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
-        # hdf5_file = h5py.File(hdf5_path, mode='r')
-        # num_z = hdf5_file["zs"].shape[0]
+        # get z vectors from forward pass of encoder
 
-        if z1 < len(self.data_voxels):
-            batch_voxels = self.data_voxels[z1:z1 + 1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
-            z1_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
-            z1_vec = z1_vec_.detach().cpu().numpy()
-        else:
-            print(" z1 not a valid number")
+        # z1_vec = self.get_zvec(z1)
+        z1_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
+        # z2_vec = self.get_zvec(z1)
+        z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
 
-        if z2 < len(self.data_voxels):
-            batch_voxels = self.data_voxels[z2:z2 + 1].astype(np.float32)
-            batch_voxels = torch.from_numpy(batch_voxels)
-            batch_voxels = batch_voxels.to(self.device)
-            z2_vec_, _ = self.im_network(batch_voxels, None, None, is_training=False)
-            z2_vec = z2_vec_.detach().cpu().numpy()
-        else:
-            print(" z2 not a valid number")
+        for step in range(config.interpol_steps):
+            start_time = time.perf_counter()
+            # accumulate the gradient over the whole volume
+            grad = self.latent_gradient(z1_vec, z2_vec, step, config)
 
-        self.test_mesh_point(self, config)
+            z1_vec += grad * self.dream_rate
 
+            end_time = time.perf_counter()
+            print('Completed dream {} in {} seconds'.format(step, end_time - start_time))
+
+        print('Done Dreaming..')
