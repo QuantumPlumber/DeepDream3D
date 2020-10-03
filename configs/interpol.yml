@@ -67,10 +67,10 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 11
+interpol_z1: 300
 
 # Second Interpolation latent vector
-interpol_z2: 1000
+interpol_z2: 500
 
 # number of steps to take between values
 interpol_steps: 5

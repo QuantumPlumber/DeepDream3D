@@ -78,7 +78,7 @@ class IM_AE_DD(IM_AE):
 
         # get the z vectors via forward pass through encoder
         z1_vec = self.get_zvec(z1)
-        z2_vec = self.get_zvec(z1)
+        z2_vec = self.get_zvec(z2)
 
         # compute linear interpolation between vectors
         fraction = np.linspace(0, 1, interpol_steps)
@@ -90,7 +90,7 @@ class IM_AE_DD(IM_AE):
             start_time = time.time()
             model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
             # print('current latent vector:')
-            print(model_z.shape)
+            # print(model_z.shape)
 
             model_z = torch.from_numpy(model_z).float()
             model_z = model_z.to(self.device)
@@ -122,12 +122,12 @@ class IM_AE_DD(IM_AE):
         '''
 
         # make sure z_base will accumulate gradients
-        #z_base.requires_grad = True
+        # z_base.requires_grad = True
         # make sure gradients are set to zero to begin with.
         self.im_network.zero_grad()
-
+        # print(z_base.grad)
         # create a numpy array to store accumulated derivatives
-        accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
+        # accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -146,9 +146,9 @@ class IM_AE_DD(IM_AE):
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
 
+            # TODO: remove dummy data
             _, model_out_ = self.im_network(None, z_base, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
-            # TODO: remove dummy data
             # model_out = np.random.random(size=[1, 4096, 1])
 
             x_coords = self.frame_x[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
@@ -179,7 +179,7 @@ class IM_AE_DD(IM_AE):
         assert cell_batch_num > 0
         # run queue
         iter_num = 0
-        total_iter = len(queue) // cell_batch_num
+        total_iter = que_len // cell_batch_num
         while len(queue) > 0:
             batch_num = min(len(queue), cell_batch_num)
             point_list = []
@@ -196,30 +196,49 @@ class IM_AE_DD(IM_AE):
             # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             style_activation = self.target_activation[0]
+            style_points_mask = model_out_batch_.detach().expand(-1, -1,
+                                                                 style_activation.size()[2]) > self.sampling_threshold
 
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
             base_activation = self.target_activation[0]
+            base_points_mask = model_out_batch_.detach().expand(-1, -1,
+                                                                base_activation.size()[2]) > self.sampling_threshold
 
             # Now compute the gradient
             # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
             # gradient = torch.from_numpy(gradient_).to(self.device)
 
             # no need to track gradient for these operations
+            '''
             with torch.no_grad():
-                mantissa = style_activation - base_activation
-                mantissa = torch.abs(mantissa/(mantissa.norm()))
-                #print(mantissa)
+                diff = torch.abs(style_activation - base_activation)
+                mean = diff.mean()
+                print(mean)
+                shift_diff = diff - mean
+                sigma2 = torch.pow(shift_diff, 2).mean()
+                print(sigma2)
+                mantissa = torch.pow(shift_diff / sigma2, 2) # divide by total number of points
+                # print(mantissa)
                 loss = torch.exp(-mantissa)
+            '''
+
+            difference = style_activation - base_activation
+            loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
+
+            # loss = base_activation / torch.abs((style_activation - base_activation) + .001)
+            # loss = style_activation - base_activation
+
+            loss[torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))] = 0
+            # print(loss)
 
             base_activation.backward(loss)
 
-            print(z_base.grad)
+            # print(z_base.grad)
 
             # Store gradient
             # batch_grad = z_base.grad
             # accumulated_grad += batch_grad.detach().cpu().numpy() / que_len
-
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
@@ -246,9 +265,10 @@ class IM_AE_DD(IM_AE):
             print('iteration {} of {} completed'.format(iter_num, total_iter))
             iter_num += 1
 
+        # TODO: uncomment file writing
         vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
         vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
-        # vertices = self.optimize_mesh(vertices,model_z)
+        # # vertices = self.optimize_mesh(vertices, model_z)
         write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
         return z_base.grad
@@ -263,6 +283,7 @@ class IM_AE_DD(IM_AE):
         :return:
         '''
 
+        # TODO: uncomment checkpoint load
         # load previous checkpoint
         self.load_checkpoint()
 
@@ -295,20 +316,40 @@ class IM_AE_DD(IM_AE):
 
         # TODO: comment out dummy data
         z1_vec_ = torch.from_numpy(self.get_zvec(z1)).float().to(self.device)
-        #z1_vec_ = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
+        # z1_vec_copy = z1_vec_.clone()
+        # z1_vec_ = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
         z1_vec = torch.autograd.Variable(z1_vec_, requires_grad=True)
 
-        z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
-        #z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
+        # z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
+        z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
 
-        for step in range(config.interpol_steps):
+        for step in range(interpol_steps):
             start_time = time.perf_counter()
+
             # accumulate the gradient over the whole volume
+            '''
+            if step < interpol_steps // 2:
+                grad = self.latent_gradient(z1_vec, z2_vec, step, config)
+            elif step >= interpol_steps // 2:
+                grad = self.latent_gradient(z1_vec, z1_vec_copy, step, config)
+            '''
             grad = self.latent_gradient(z1_vec, z2_vec, step, config)
+            # print(grad)
 
-            print(grad)
+            with torch.no_grad():
+                mean = grad.mean()
+                print(mean)
+                shift_grad = grad - mean
+                sigma2 = torch.pow(shift_grad, 2).mean()
+                print(sigma2)
+                mantissa = torch.pow(shift_grad, 2) / sigma2  # divide by total number of points
+                # print(mantissa)
+                # grad_step = torch.exp(-mantissa) * self.dream_rate
+                grad_step = mantissa * self.dream_rate
+            # grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
 
-            z1_vec.data += grad.data / (grad.data.norm() + .01) * self.dream_rate
+            print(grad_step)
+            z1_vec.data += grad_step
 
             end_time = time.perf_counter()
             print('Completed dream {} in {} seconds'.format(step, end_time - start_time))

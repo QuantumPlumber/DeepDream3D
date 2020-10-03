@@ -67,18 +67,18 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 10
+interpol_z1: 300
 
 # Second Interpolation latent vector
-interpol_z2: 1000
+interpol_z2: 1500
 
 # number of steps to take between values
-interpol_steps: 5
+interpol_steps: 10
 
 # --------------- deepdream -------------------------------
 
 # layer number to interpolate
-layer_num: 3
+layer_num: 5
 
 # dream update rate
-dream_rate: .00
+dream_rate: .01

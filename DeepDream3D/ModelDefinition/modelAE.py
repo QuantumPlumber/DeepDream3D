@@ -53,7 +53,7 @@ class IM_AE(base_model.BaseModel):
         self.ef_dim = 32
 
         # load data
-        #TODO: uncomment this
+        # TODO: uncomment this
         self.load_data()
 
         # build model
@@ -64,7 +64,7 @@ class IM_AE(base_model.BaseModel):
         #	print(param_tensor, "\t", self.im_network.state_dict()[param_tensor].size())
 
         self.optimizer = torch.optim.Adam(self.im_network.parameters(), lr=config.learning_rate,
-                                           betas=(config.beta1, 0.999))
+                                          betas=(config.beta1, 0.999))
 
         # pytorch does not have a checkpoint manager
         # have to define it myself to manage max num of checkpoints to keep
@@ -111,7 +111,6 @@ class IM_AE(base_model.BaseModel):
         else:
             print(" [!] Load failed...")
             exit(0)
-
 
     def train(self, config):
         # load previous checkpoint
