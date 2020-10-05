@@ -1,22 +1,21 @@
 
-# Configuration file for running experiments.
-# This is the preferred method for sending configuration information.
-# values specified here override values handed to the command line parser.
+# Configuration file for running deep dream experiments.
+#
 
 # --------------- specify model architecture-------------------------------
 # Choose one
 
 # True for ae [False]
-ae: null
+#ae: null
 
 # True for svr
 #svr: null
 
 # True for deepdream
-#deepdream: null
+deepdream: null
 
 # --------------- specify model mode-------------------------------
-# Choose one, no choice defaults to test
+# Choose one, no choice produces default behavior of each model
 
 # True for training
 #train: null
@@ -49,7 +48,6 @@ end: 16
 
 # --------------- Data and Directories -------------------------------
 
-
 # The name of dataset
 dataset: "all_vox256_img"
 
@@ -69,10 +67,18 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 1
+interpol_z1: 300 # a plane
 
 # Second Interpolation latent vector
-interpol_z2: 10
+interpol_z2: 1500 # a car
 
 # number of steps to take between values
 interpol_steps: 5
+
+# --------------- deepdream -------------------------------
+
+# layer number to interpolate
+layer_num: 1
+
+# dream update rate
+dream_rate: .01

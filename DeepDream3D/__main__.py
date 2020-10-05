@@ -102,8 +102,8 @@ if sys.argv[1] is not None:
     FLAGS = parser.parse_args(args=command_string)
 
 # TODO: uncomment directory creation
-# if not os.path.exists(FLAGS.sample_dir):
-#    os.makedirs(FLAGS.sample_dir)
+if not os.path.exists(FLAGS.sample_dir):
+    os.makedirs(FLAGS.sample_dir)
 
 if FLAGS.ae:
     im_ae = IM_AE(FLAGS)

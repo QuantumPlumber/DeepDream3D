@@ -64,7 +64,7 @@ class IM_AE_DD(IM_AE):
         interpol_steps = int(config.interpol_steps)
         result_base_directory = config.interpol_directory
         result_dir_name = 'interpol_' + str(z1) + '_' + str(z2)
-        result_dir = config.interpol_directory + '/' + result_dir_name
+        result_dir = result_base_directory + '/' + result_dir_name
 
         # Create output directory
         if not os.path.isdir(result_dir):
@@ -223,13 +223,16 @@ class IM_AE_DD(IM_AE):
                 loss = torch.exp(-mantissa)
             '''
 
-            difference = style_activation - base_activation
-            loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
-
             # loss = base_activation / torch.abs((style_activation - base_activation) + .001)
             # loss = style_activation - base_activation
 
+            difference = style_activation - base_activation
+            # loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
+            loss = torch.sign(difference) / (torch.abs(difference) + .001)
+
+
             loss[torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))] = 0
+            # loss[torch.logical_not(base_points_mask)] = 0
             # print(loss)
 
             base_activation.backward(loss)
@@ -268,7 +271,8 @@ class IM_AE_DD(IM_AE):
         # TODO: uncomment file writing
         vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
         vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
-        # # vertices = self.optimize_mesh(vertices, model_z)
+        # vertices = self.optimize_mesh(vertices, model_z)
+        print('writing file: ' + self.result_dir + "/" + str(step) + "_vox.ply")
         write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
         return z_base.grad
@@ -292,7 +296,14 @@ class IM_AE_DD(IM_AE):
 
         # Set up forward hook to pull values
         self.layer_num = config.layer_num
+        # list index includes as zero entry the generator module itself. (layer indices start from 1)
+        num_model_layers = len(list(self.im_network.generator.named_modules())) - 1
+        if self.layer_num >= num_model_layers:
+            print('Layer number is too large: select layer numbers from 1 to {}'.format(num_model_layers))
+            exit(0)
+
         # this is the way to get the actual model variable
+        # get the input of the next layer to capture the nonlinearity, hence the layer_num + 1
         self.target_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
         self.target_activation = [None]
 
@@ -303,7 +314,7 @@ class IM_AE_DD(IM_AE):
         z2 = int(config.interpol_z2)
         interpol_steps = int(config.interpol_steps)
         result_base_directory = config.interpol_directory
-        result_dir_name = 'DeepDream_' + str(z1) + '_' + str(z2)
+        result_dir_name = 'DeepDream_' + str(z1) + '_' + str(z2) + '_layer_' + str(self.layer_num)
         self.result_dir = result_base_directory + '/' + result_dir_name
 
         # Create output directory
@@ -320,8 +331,9 @@ class IM_AE_DD(IM_AE):
         # z1_vec_ = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
         z1_vec = torch.autograd.Variable(z1_vec_, requires_grad=True)
 
-        # z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
-        z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
+        # TODO: comment out dummy data
+        z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
+        # z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
 
         for step in range(interpol_steps):
             start_time = time.perf_counter()
@@ -338,17 +350,17 @@ class IM_AE_DD(IM_AE):
 
             with torch.no_grad():
                 mean = grad.mean()
-                print(mean)
+                # print(mean)
                 shift_grad = grad - mean
                 sigma2 = torch.pow(shift_grad, 2).mean()
-                print(sigma2)
-                mantissa = torch.pow(shift_grad, 2) / sigma2  # divide by total number of points
+                # print(sigma2)
+                mantissa = torch.pow(shift_grad, 2) / sigma2  # divide by standard deviation
                 # print(mantissa)
                 # grad_step = torch.exp(-mantissa) * self.dream_rate
                 grad_step = mantissa * self.dream_rate
             # grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
 
-            print(grad_step)
+            # print(grad_step)
             z1_vec.data += grad_step
 
             end_time = time.perf_counter()

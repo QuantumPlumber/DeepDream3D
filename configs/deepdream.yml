@@ -78,6 +78,7 @@ interpol_steps: 10
 # --------------- deepdream -------------------------------
 
 # layer number to interpolate
+# layers are indexed from 1. Hook to collect derivative uses input of the following layer to capture nonlinear functions
 layer_num: 5
 
 # dream update rate
