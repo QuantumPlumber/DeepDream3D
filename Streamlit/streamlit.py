@@ -12,6 +12,12 @@ import matplotlib.pyplot as plt
 
 from skimage.io import imread
 
+from pytorch3d.ops import cubify
+
+from pytorch3d.io import save_ply, save_obj, load_objs_as_meshes, load_obj, load_ply
+
+from pytorch3d.structures import Meshes
+
 from pytorch3d.renderer import (
     look_at_view_transform,
     FoVPerspectiveCameras,
@@ -42,6 +48,7 @@ from DeepDream3D.ModelDefinition.modelAE import IM_AE
 from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
 from DeepDream3D.ModelDefinition.modelAE_DD import IM_AE_DD
 
+# ---------------------------------------------------------------------------------------------------------------------#
 parser_actions = []
 
 parser = argparse.ArgumentParser(conflict_handler='resolve')
@@ -143,7 +150,7 @@ parser_actions.append(parser.add_argument("--dream_rate", action="store", dest="
                                           help="dream update rate"))
 
 
-# ------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------------------------#
 
 # parameter reading function for parsing YAML file.
 def read_config(yaml_file):
@@ -165,6 +172,7 @@ def read_config(yaml_file):
     return FLAGS
 
 
+# ---------------------------------------------------------------------------------------------------------------------#
 @st.cache(allow_output_mutation=True)
 def create_model_instance(FLAGS):
     im_ae_dd = IM_AE_DD(FLAGS)
@@ -173,6 +181,7 @@ def create_model_instance(FLAGS):
     return None, im_ae_dd
 
 
+# ---------------------------------------------------------------------------------------------------------------------#
 def data_image(images):
     fig, axs = plt.subplots(nrows=6,
                             ncols=4,
@@ -189,6 +198,7 @@ def data_image(images):
     return fig
 
 
+# ---------------------------------------------------------------------------------------------------------------------#
 @st.cache
 def define_render(num):
     shapenet_cam_params_file = '../data/metadata/rendering_metadata.json'
@@ -229,17 +239,120 @@ def define_render(num):
     return renderer
 
 
-@st.cache
-def process(FLAGS):
+# ---------------------------------------------------------------------------------------------------------------------#
+def interpolate(FLAGS):
     '''
-    General processing wrapped in a cache to prevent recomputation
+    General interpolating wrapped in a cache to prevent recomputation
 
     :param FLAGS:
     :return:
     '''
 
+    global im_ae_dd, renderer_instance
+
+    im_ae_dd.interpolate_z(FLAGS)
+
+    interpolation_dir = im_ae_dd.result_dir
+
+    files = os.listdir(interpolation_dir)
+    verts = []
+    faces = []
+    verts_rgb = []
+    for file in files:
+        vert, face = load_ply(interpolation_dir + '/' + file)
+        verts.append(vert.to(device))
+        faces.append(face.to(device))
+        verts_rgb.append(torch.ones_like(vert).to(device))
+
+    textures = Textures(verts_rgb=verts_rgb)
+    interpol_mesh = Meshes(verts, faces, textures)
+
+    print('rendering images')
+    images = renderer_instance(interpol_mesh).cpu().numpy()
+
+    print('processing images')
+    num_images = int(images.shape[0])
+    rows = int(num_images ** .5)
+    print(rows)
+    cols = num_images // rows
+    print(cols)
+
+    fig, axs = plt.subplots(nrows=rows,
+                            ncols=cols,
+                            sharex='all',
+                            sharey='all',
+                            figsize=(20, 20),
+                            gridspec_kw={'wspace': 0, 'hspace': 0}
+                            )
+
+    for ax, im in zip(axs.flatten(), range(num_images)):
+        ax.imshow(images[im, :, :, :3])
+        ax.axis('off')
+
+    return fig
+
+
+# ---------------------------------------------------------------------------------------------------------------------#
+def deepdream(FLAGS):
+    '''
+    General deepdreaming wrapped in a cache to prevent recomputation
+
+    :param FLAGS:
+    :return:
+    '''
+
+    global im_ae_dd, renderer_instance
+
+    im_ae_dd.deep_dream(FLAGS)
+
+    deep_dream_dir = im_ae_dd.result_dir
+
+    files = os.listdir(deep_dream_dir)
+    verts = []
+    faces = []
+    verts_rgb = []
+    for file in files:
+        vert, face = load_ply(deep_dream_dir + '/' + file)
+        verts.append(vert.to(device))
+        faces.append(face.to(device))
+        verts_rgb.append(torch.ones_like(vert).to(device))
+
+    textures = Textures(verts_rgb=verts_rgb)
+    interpol_mesh = Meshes(verts, faces, textures)
+
+    print('rendering images')
+    images = renderer_instance(interpol_mesh).cpu().numpy()
+
+    print('processing images')
+    num_images = int(images.shape[0])
+    cols = 2
+    rows = -int(-num_images // cols)
+
+    fig, axs = plt.subplots(nrows=rows,
+                            ncols=cols,
+                            sharex='all',
+                            sharey='all',
+                            figsize=(20, 20),
+                            gridspec_kw={'wspace': 0, 'hspace': 0}
+                            )
+
+    for ax, im in zip(axs.flatten(), range(num_images)):
+        ax.imshow(images[im, :, :, :3])
+        ax.axis('off')
+
+    return fig
+
+
+# ---------------------------------------------------------------------------------------------------------------------#
+# ---------------------------------------------------------------------------------------------------------------------#
+# ---------------------------------------------------------------------------------------------------------------------#
+# ---------------------------------------------------------------------------------------------------------------------#
+# ---------------------------------------------------------------------------------------------------------------------#
 
 if __name__ == '__main__':
+
+    process_flag = False
+
     st.title('Deep Dreamin\' in 3D')
 
     # ----------------------- read in yaml config file ----------------------------------
@@ -249,6 +362,35 @@ if __name__ == '__main__':
 
     user_FLAGS = copy.deepcopy(nominal_FLAGS)
     user_flags_dict = vars(user_FLAGS)
+
+    st.sidebar.text('Click the below button to process \n nominal settings.')
+    process_button_flag = st.sidebar.button(
+        label='Process',
+        key='reset'
+    )
+    if process_button_flag:
+        process_flag = True
+
+    st.sidebar.header('Configuration Options')
+
+    st.sidebar.text('Click the below button to revert to \n nominal settings.')
+    reset_model_flag = st.sidebar.button(
+        label='Reset',
+        key='reset'
+    )
+    if reset_model_flag:
+        nominal_YAML = '../configs/default_config.yml'
+        nominal_FLAGS = read_config(nominal_YAML)
+
+    st.sidebar.text(
+        'Changing model type requires a model \n reload after selection. Click here \n to reload the model.')
+    reload_model_flag = st.sidebar.button(
+        label='Change model type',
+        key='model re-load'
+    )
+
+    if reload_model_flag:
+        nominal_FLAGS = user_FLAGS.deepcopy()
 
     # ----------------------- set up buttons for config file ----------------------------------
 
@@ -260,6 +402,7 @@ if __name__ == '__main__':
                        'interpol_z1', 'interpol_z2', 'interpol_steps',
                        'layer_num', 'dream_rate']
 
+    st.sidebar.text('Model Type:')
     for action, [flag, param] in enumerate(user_flags_dict.items()):
         if flag in param_to_expose:
             if type(param) is bool:
@@ -270,11 +413,31 @@ if __name__ == '__main__':
                 )
 
             if type(param) is int:
+
+                if flag is 'layer_num':
+                    user_flags_dict[flag] = st.sidebar.number_input(
+                        label=parser._actions[action + 1].help,
+                        value=param,
+                        max_value=6,
+                        min_value=1,
+                        key=flag
+                    )
+                else:
+                    user_flags_dict[flag] = st.sidebar.number_input(
+                        label=parser._actions[action + 1].help,
+                        value=param,
+                        key=flag
+                    )
+            if type(param) is float:
                 user_flags_dict[flag] = st.sidebar.number_input(
                     label=parser._actions[action + 1].help,
                     value=param,
+                    step=.001,
                     key=flag
                 )
+
+            if flag == 'svr':
+                st.sidebar.text('Model operation:')
 
     camera_num = st.sidebar.number_input(
         label='ShapeNet rendering camera view number',
@@ -283,8 +446,6 @@ if __name__ == '__main__':
     )
 
     # ----------------------- Check parameters for consistency ----------------------------------
-
-    process_flag = True
 
     data_path = user_FLAGS.data_dir
     if not os.path.isdir(data_path):
@@ -343,4 +504,19 @@ if __name__ == '__main__':
         st.text('The 24 rendered images of shapenet object {} are displayed below'.format(z2))
         st.pyplot(data_image(data_file['pixels'][z2][...]))
 
-        renderer = define_render()
+        renderer_instance = define_render(camera_num)
+
+        # Create first and last starting shapes
+        st.text("Below are renderings of the shapes after being run through the encoder and IMNET decoder..")
+        diagnostic_flags = copy.deepcopy(user_FLAGS)
+        diagnostic_flags.interpol_steps = 2
+        st.pyplot(interpolate(FLAGS=diagnostic_flags))
+
+        if user_FLAGS.interpol:
+            st.text('Interpolation results:')
+            with st.spinner('Interpolating: expected wait time is {} seconds..'.format(user_FLAGS.interpol_steps * 6)):
+                st.pyplot(interpolate(FLAGS=user_FLAGS))
+        if user_FLAGS.deepdream:
+            st.text('Deepdream results:')
+            with st.spinner('Interpolating: expected wait time is {} seconds..'.format(user_FLAGS.interpol_steps * 10)):
+                st.pyplot(deepdream(user_FLAGS))
