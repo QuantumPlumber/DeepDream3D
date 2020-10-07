@@ -109,3 +109,6 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+/bash_run_scripts/IM_AE.model16-199.pth
+/bash_run_scripts/IM_AE.model32-199.pth
+/bash_run_scripts/IM_AE.model64-399.pth

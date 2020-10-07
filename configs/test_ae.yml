@@ -1,0 +1,72 @@
+
+# Configuration file for running experiments.
+# This is the preferred method for sending configuration information.
+# values specified here override values handed to the command line parser.
+
+# --------------- specify model architecture-------------------------------
+
+# True for ae [False]
+ae: true
+
+# True for svr
+svr: false
+
+# --------------- specify model mode-------------------------------
+
+# True for training, False for testing
+train: false
+
+# True for getting latent codes
+getz: false
+
+# True for interpolating latent codes
+interpol: false
+
+
+# --------------- training -------------------------------
+
+# Voxel resolution for coarse-to-fine training
+sample_vox_size: 64
+
+epoch: 0 # Epoch to train
+iteration: 0 # Iteration to train. Either epoch or iteration need to be zero
+
+# Adam Optimizer Settings
+learning_rate: 0.00005 # Learning rate for adam
+beta1: 0.5 # Momentum term of adam [0.5]
+
+
+# --------------- testing -------------------------------
+
+# "hdf5 file start and end index for testing [start:end]"
+start: 0
+end: 16
+
+# --------------- Data and Directories -------------------------------
+
+# The name of dataset
+dataset: "all_vox256_img"
+
+# Directory name to save the checkpoints
+checkpoint_dir: "/data/IM-NET-pytorch/checkpoint"
+
+# Root directory of dataset [data]
+data_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
+
+# Directory for image samples
+sample_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
+
+
+# --------------- Interpolation -------------------------------
+
+# Directory to store interpolation results
+interpol_directory: None
+
+# First Interpolation latent vector
+interpol_z1: 1
+
+# Second Interpolation latent vector
+interpol_z2: 10
+
+# number of steps to take between values
+interpol_steps: 5

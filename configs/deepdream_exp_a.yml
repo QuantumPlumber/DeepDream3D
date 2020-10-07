@@ -1,0 +1,84 @@
+
+# Configuration file for running deep dream experiments.
+#
+
+# --------------- specify model architecture-------------------------------
+# Choose one
+
+# True for ae [False]
+#ae: null
+
+# True for svr
+#svr: null
+
+# True for deepdream
+deepdream: null
+
+# --------------- specify model mode-------------------------------
+# Choose one, no choice produces default behavior of each model
+
+# True for training
+#train: null
+
+# True for getting latent codes
+#getz: null
+
+# True for interpolating latent codes
+#interpol: null
+
+
+# --------------- training -------------------------------
+
+# Voxel resolution for coarse-to-fine training
+sample_vox_size: 64
+
+epoch: 0 # Epoch to train
+iteration: 0 # Iteration to train. Either epoch or iteration need to be zero
+
+# Adam Optimizer Settings
+learning_rate: 0.00005 # Learning rate for adam
+beta1: 0.5 # Momentum term of adam [0.5]
+
+
+# --------------- testing -------------------------------
+
+# "hdf5 file start and end index for testing [start:end]"
+start: 0
+end: 16
+
+# --------------- Data and Directories -------------------------------
+
+# The name of dataset
+dataset: "all_vox256_img"
+
+# Directory name to save the checkpoints
+checkpoint_dir: "/data/IM-NET-pytorch/checkpoint"
+
+# Root directory of dataset [data]
+data_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
+
+# Directory for image samples
+sample_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
+
+# Directory to store interpolation results
+interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
+
+# --------------- Interpolation -------------------------------
+
+
+# First Interpolation latent vector
+interpol_z1: 300 # a plane
+
+# Second Interpolation latent vector
+interpol_z2: 1500 # a car
+
+# number of steps to take between values
+interpol_steps: 5
+
+# --------------- deepdream -------------------------------
+
+# layer number to interpolate
+layer_num: 1
+
+# dream update rate
+dream_rate: .01
