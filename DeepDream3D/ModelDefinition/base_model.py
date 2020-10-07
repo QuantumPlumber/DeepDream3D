@@ -5,8 +5,6 @@ Base class for defining common  model architectures.
 
 '''
 
-
-
 import os
 import time
 import math
@@ -22,6 +20,7 @@ from torch import optim
 from torch.autograd import Variable
 
 import mcubes
+import cv2
 
 from .utils import *
 
@@ -216,9 +215,12 @@ class img_encoder(nn.Module):
         return layer_10
 
 
-
 class BaseModel(object):
     def __init__(self, config):
+
+        #keep track of if the last checkpoint was loaded.
+        self.checkpoint_loaded = False
+
         # progressive training
         # 1-- (16, 16*16*16)
         # 2-- (32, 16*16*16)
@@ -242,7 +244,6 @@ class BaseModel(object):
         self.z_dim = 256
         self.point_dim = 3
 
-
         self.dataset_name = config.dataset
         self.dataset_load = self.dataset_name + '_train'
         if not (config.train or config.getz):
@@ -256,12 +257,11 @@ class BaseModel(object):
         else:
             self.device = torch.device('cpu')
 
-
         # keep everything a power of 2
         self.cell_grid_size = 4
         self.frame_grid_size = 64
         self.real_size = self.cell_grid_size * self.frame_grid_size  # =256, output point-value voxel grid size in testing
-        #TODO revert back to 32
+        # TODO revert back to 32
         self.test_size = 32  # related to testing batch_size, adjust according to gpu memory size
         self.test_point_batch_size = self.test_size * self.test_size * self.test_size  # do not change
 
@@ -298,7 +298,6 @@ class BaseModel(object):
         self.coords = np.reshape(self.coords, [multiplier3, self.test_point_batch_size, 3])
         self.coords = torch.from_numpy(self.coords)
         self.coords = self.coords.to(self.device)
-
 
     def build_sampling_coords(self):
         # get coords for testing
@@ -340,3 +339,17 @@ class BaseModel(object):
         self.frame_z = np.reshape(self.frame_z, [dimf * dimf * dimf])
         self.frame_coords = (self.frame_coords.astype(np.float32) + 0.5) / dimf - 0.5
         self.frame_coords = np.reshape(self.frame_coords, [dimf * dimf * dimf, 3])
+
+    def cv2_image_transform(self, img):
+        '''
+        Basic image transform used as input to IM_SVR
+
+        :param img:
+        :return:
+        '''
+        imgo = img[:, :, :3]
+        imgo = cv2.cvtColor(imgo, cv2.COLOR_BGR2GRAY)
+        imga = (img[:, :, 3]) / 255.0
+        img_out = imgo * imga + 255 * (1 - imga)
+        img_out = np.round(img_out).astype(np.uint8)
+        return img_out

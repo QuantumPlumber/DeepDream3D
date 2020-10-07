@@ -498,10 +498,10 @@ if __name__ == '__main__':
         z2 = user_FLAGS.interpol_z2
 
         # display images for each object:
-        st.text('The 24 rendered images of shapenet object {} are displayed below'.format(z1))
+        st.text('The 24 rendered images of shapenet training object {} are displayed below'.format(z1))
         st.pyplot(data_image(data_file['pixels'][z1][...]))
 
-        st.text('The 24 rendered images of shapenet object {} are displayed below'.format(z2))
+        st.text('The 24 rendered images of shapenet training object {} are displayed below'.format(z2))
         st.pyplot(data_image(data_file['pixels'][z2][...]))
 
         renderer_instance = define_render(camera_num)

@@ -100,17 +100,19 @@ class IM_AE(base_model.BaseModel):
 
     def load_checkpoint(self):
         # load previous checkpoint
-        checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-        if os.path.exists(checkpoint_txt):
-            fin = open(checkpoint_txt)
-            model_dir = fin.readline().strip()
-            fin.close()
-            self.im_network.load_state_dict(torch.load(model_dir))
-            print(" [*] Load SUCCESS")
-            return
-        else:
-            print(" [!] Load failed...")
-            exit(0)
+        if not self.checkpoint_loaded:
+            checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
+            if os.path.exists(checkpoint_txt):
+                fin = open(checkpoint_txt)
+                model_dir = fin.readline().strip()
+                fin.close()
+                self.im_network.load_state_dict(torch.load(model_dir))
+                print(" [*] Load SUCCESS")
+                self.checkpoint_loaded = True
+                return
+            else:
+                print(" [!] Load failed...")
+                exit(0)
 
     def train(self, config):
         # load previous checkpoint

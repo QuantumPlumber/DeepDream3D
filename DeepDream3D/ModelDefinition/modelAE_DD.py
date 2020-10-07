@@ -12,6 +12,10 @@ import torch.nn.functional as F
 from torch import optim
 from torch.autograd import Variable
 
+from pytorch3d.ops import sample_points_from_meshes
+from pytorch3d.io import load_ply
+from pytorch3d.structures import Meshes
+
 import mcubes
 
 from .utils import *
@@ -24,7 +28,7 @@ class IM_AE_DD(IM_AE):
 
     def get_activation(self, output_list):
         '''
-        A wrapper function to establish teh forward hook
+        A wrapper function to establish the forward hook
 
         :param out:
         :return:
@@ -126,10 +130,9 @@ class IM_AE_DD(IM_AE):
         :return:
         '''
 
-        # make sure z_base will accumulate gradients
-        # z_base.requires_grad = True
         # make sure gradients are set to zero to begin with.
         self.im_network.zero_grad()
+
         # print(z_base.grad)
         # create a numpy array to store accumulated derivatives
         # accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
@@ -201,14 +204,25 @@ class IM_AE_DD(IM_AE):
             # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             style_activation = self.target_activation[0]
-            style_points_mask = model_out_batch_.detach().expand(-1, -1,
-                                                                 style_activation.size()[2]) > self.sampling_threshold
+            # style_points_mask = model_out_batch_.detach().expand(-1, -1,
+            #                                                     style_activation.size()[2]) > self.sampling_threshold
+
+            style_points_mask = model_out_batch_.detach().expand(-1, -1, style_activation.size()[2])
+            style_points_mask_above = style_points_mask > (1 - self.boundary) * self.sampling_threshold
+            style_points_mask_below = style_points_mask > (1 + self.boundary) * self.sampling_threshold
+            style_points_mask = torch.logical_and(style_points_mask_above, style_points_mask_below)
+
 
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
             base_activation = self.target_activation[0]
-            base_points_mask = model_out_batch_.detach().expand(-1, -1,
-                                                                base_activation.size()[2]) > self.sampling_threshold
+            # base_points_mask = model_out_batch_.detach().expand(-1, -1,
+            #                                                    base_activation.size()[2]) > self.sampling_threshold
+
+            base_points_mask = model_out_batch_.detach().expand(-1, -1, base_activation.size()[2])
+            base_points_mask_above = base_points_mask > (1 - self.boundary) * self.sampling_threshold
+            base_points_mask_below = base_points_mask > (1 + self.boundary) * self.sampling_threshold
+            base_points_mask = torch.logical_and(base_points_mask_above, base_points_mask_below)
 
             # Now compute the gradient
             # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
@@ -234,7 +248,7 @@ class IM_AE_DD(IM_AE):
             difference = style_activation - base_activation
             # loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
             # loss = torch.sign(difference) / (torch.abs(difference) + .001)
-            loss = difference
+            loss = difference.detach()
 
             # Union
             loss[torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))] = 0
@@ -285,7 +299,72 @@ class IM_AE_DD(IM_AE):
         print('writing file: ' + self.result_dir + "/" + str(step) + "_vox.ply")
         write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
+        # update base sample points for next iteration.
+        #base_mesh = Meshes(verts=[vertices])
+        #self.base_sample_points = sample_points_from_meshes(meshes=base_mesh, num_samples=int(1e5))
+
         return z_base.grad
+
+    def latent_surface_gradient(self, z_base, z_target):
+
+        # create cell coordinates here by matching surfaces.
+        # iterate through a selection of polar angles and collect points
+        # Expand number of points to match
+        # randomize within each group.
+
+
+
+
+        cell_coords = None
+
+        # Call the model on the target to get target encoder layer
+        _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+        style_activation = self.target_activation[0]
+        style_points_mask = model_out_batch_.detach().expand(-1, -1,
+                                                             style_activation.size()[2]) > self.sampling_threshold
+
+        # Call the model on the base to get base encoder layer, first set z_base to is_training = true
+        _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
+        base_activation = self.target_activation[0]
+        base_points_mask = model_out_batch_.detach().expand(-1, -1,
+                                                            base_activation.size()[2]) > self.sampling_threshold
+
+        # Now compute the gradient
+        # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
+        # gradient = torch.from_numpy(gradient_).to(self.device)
+
+        # no need to track gradient for these operations
+        '''
+        with torch.no_grad():
+            diff = torch.abs(style_activation - base_activation)
+            mean = diff.mean()
+            print(mean)
+            shift_diff = diff - mean
+            sigma2 = torch.pow(shift_diff, 2).mean()
+            print(sigma2)
+            mantissa = torch.pow(shift_diff / sigma2, 2) # divide by total number of points
+            # print(mantissa)
+            loss = torch.exp(-mantissa)
+        '''
+
+        # loss = base_activation / torch.abs((style_activation - base_activation) + .001)
+        # loss = style_activation - base_activation
+
+        difference = style_activation - base_activation
+        # loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
+        # loss = torch.sign(difference) / (torch.abs(difference) + .001)
+        loss = difference
+
+        # Union
+        loss[torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))] = 0
+
+        # Intersection
+        # loss[torch.logical_or(torch.logical_not(style_points_mask), torch.logical_not(base_points_mask))] = 0
+
+        # loss[torch.logical_not(base_points_mask)] = 0
+        # print(loss)
+
+        base_activation.backward(loss)
 
     def deep_dream(self, config):
         '''
@@ -301,8 +380,9 @@ class IM_AE_DD(IM_AE):
         # load previous checkpoint
         self.load_checkpoint()
 
-        #
+        # set the dreaming rate and boundary size
         self.dream_rate = config.dream_rate
+        self.boundary = .1
 
         # Set up forward hook to pull values
         self.layer_num = config.layer_num
@@ -313,7 +393,6 @@ class IM_AE_DD(IM_AE):
             exit(0)
 
         # this is the way to get the actual model variable
-        # get the input of the next layer to capture the nonlinearity, hence the layer_num + 1
         self.target_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
         self.target_activation = [None]
 
@@ -346,10 +425,26 @@ class IM_AE_DD(IM_AE):
         z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
         # z2_vec = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
 
+        # Generate base model vertices.
+        '''
+        model_float = self.z2voxel(z1_vec_)
+        vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+        vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+        base_mesh = Meshes(verts=[vertices])
+        self.base_sample_points = sample_points_from_meshes(meshes=base_mesh, num_samples=int(1e5))
+
+        # Generate target model vertices.
+        model_float = self.z2voxel(z2_vec)
+        vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+        vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+        target_mesh = Meshes(verts=[vertices])
+        self.target_sample_points = sample_points_from_meshes(meshes=target_mesh, num_samples=int(1e5))
+        '''
+
         for step in range(interpol_steps):
             start_time = time.perf_counter()
 
-            # accumulate the gradient over the whole volume
+            # accumulate the gradient
             '''
             if step < interpol_steps // 2:
                 grad = self.latent_gradient(z1_vec, z2_vec, step, config)
@@ -364,8 +459,8 @@ class IM_AE_DD(IM_AE):
                 mean = grad.mean()
                 # print(mean)
                 shift_grad = grad - mean
-                sigma = torch.pow(torch.pow(shift_grad, 2).mean(),.5)
-                #sigma = torch.pow(shift_grad, 2).mean()
+                sigma = torch.pow(torch.pow(shift_grad, 2).mean(), .5)
+                # sigma = torch.pow(shift_grad, 2).mean()
                 # print(sigma2)
                 mantissa = torch.pow(shift_grad, 2) / sigma  # divide by standard deviation
                 # print(mantissa)

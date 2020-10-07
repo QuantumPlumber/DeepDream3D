@@ -49,6 +49,7 @@ class im_network(nn.Module):
 
 class IM_SVR(base_model.BaseModel):
     def __init__(self, config):
+        super().__init__(config)
 
         self.input_size = 64  # input voxel grid size
 
@@ -129,6 +130,22 @@ class IM_SVR(base_model.BaseModel):
             if len(self.data_zs) != len(self.data_pixels):
                 print("error: len(self.data_zs) != len(self.data_pixels)")
                 print(len(self.data_zs), len(self.data_pixels))
+                exit(0)
+
+    def load_checkpoint(self):
+        # load previous checkpoint
+        if not self.checkpoint_loaded:
+            checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
+            if os.path.exists(checkpoint_txt):
+                fin = open(checkpoint_txt)
+                model_dir = fin.readline().strip()
+                fin.close()
+                self.im_network.load_state_dict(torch.load(model_dir))
+                print(" [*] Load SUCCESS")
+                self.checkpoint_loaded = True
+                return
+            else:
+                print(" [!] Load failed...")
                 exit(0)
 
     def train(self, config):
@@ -313,8 +330,12 @@ class IM_SVR(base_model.BaseModel):
             cell_coords = np.expand_dims(cell_coords, axis=0)
             cell_coords = torch.from_numpy(cell_coords)
             cell_coords = cell_coords.to(self.device)
+
+
             _, model_out_batch_ = self.im_network(None, z, cell_coords, is_training=False)
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
+
+
             for i in range(batch_num):
                 point = point_list[i]
                 model_out = model_out_batch[i * cell_batch_size:(i + 1) * cell_batch_size, 0]

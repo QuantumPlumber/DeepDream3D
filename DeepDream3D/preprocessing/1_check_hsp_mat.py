@@ -59,7 +59,7 @@ for kkk in range(len(class_name_list)):
 	image_list = list_image(voxel_input, True, ['.mat'])
 	name_list = []
 	for i in range(len(image_list)):
-		imagine=image_list[i][0]
+		imagine = image_list[i][0]
 		name_list.append(imagine[0:-4])
 	name_list = sorted(name_list)
 	name_num = len(name_list)
