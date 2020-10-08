@@ -58,8 +58,14 @@ class IM_SVR(base_model.BaseModel):
         # actual batch size
         self.shape_batch_size = 64
 
+        self.view_size = 137
+        self.crop_size = 128
+        self.view_num = 24
+        self.test_idx = 23
+
+        # TODO: comment in data loading
         # load the data
-        self.load_data(self, config)
+        # self.load_data(self, config)
 
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
@@ -102,11 +108,7 @@ class IM_SVR(base_model.BaseModel):
             self.dataset_name, self.input_size)
 
     def load_data(self, config):
-        self.view_size = 137
-        self.crop_size = 128
-        self.view_num = 24
         self.crop_edge = self.view_size - self.crop_size
-        self.test_idx = 23
         data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
         if os.path.exists(data_hdf5_name):
             data_dict = h5py.File(data_hdf5_name, 'r')
