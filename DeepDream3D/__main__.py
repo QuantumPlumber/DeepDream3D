@@ -5,7 +5,6 @@ import yaml
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-import numpy as np
 
 # from DeepDream3D.ModelDefinition.modelAE import IM_AE
 # from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
@@ -103,8 +102,8 @@ if sys.argv[1] is not None:
     FLAGS = parser.parse_args(args=command_string)
 
 # TODO: uncomment directory creation
-# if not os.path.exists(FLAGS.sample_dir):
-#    os.makedirs(FLAGS.sample_dir)
+if not os.path.exists(FLAGS.sample_dir):
+    os.makedirs(FLAGS.sample_dir)
 
 if FLAGS.ae:
     im_ae = IM_AE_DD(FLAGS)

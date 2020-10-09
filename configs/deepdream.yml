@@ -6,13 +6,10 @@
 # Choose one
 
 # True for ae [False]
-#ae: null
+ae: null
 
 # True for svr
 #svr: null
-
-# True for deepdream
-deepdream: null
 
 # --------------- specify model mode-------------------------------
 # Choose one, no choice produces default behavior of each model
@@ -24,7 +21,10 @@ deepdream: null
 #getz: null
 
 # True for interpolating latent codes
-#interpol: null
+interpol: null
+
+# True for deepdream
+#deepdream: null
 
 
 # --------------- training -------------------------------
@@ -67,7 +67,7 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 300
+interpol_z1: 1600
 
 # Second Interpolation latent vector
 interpol_z2: 1500

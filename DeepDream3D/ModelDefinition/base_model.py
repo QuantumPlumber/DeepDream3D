@@ -340,16 +340,3 @@ class BaseModel(object):
         self.frame_coords = (self.frame_coords.astype(np.float32) + 0.5) / dimf - 0.5
         self.frame_coords = np.reshape(self.frame_coords, [dimf * dimf * dimf, 3])
 
-    def cv2_image_transform(self, img):
-        '''
-        Basic image transform used as input to IM_SVR
-
-        :param img:
-        :return:
-        '''
-        imgo = img[:, :, :3]
-        imgo = cv2.cvtColor(imgo, cv2.COLOR_BGR2GRAY)
-        imga = (img[:, :, 3]) / 255.0
-        img_out = imgo * imga + 255 * (1 - imga)
-        img_out = np.round(img_out).astype(np.uint8)
-        return img_out

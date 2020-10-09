@@ -65,7 +65,7 @@ class IM_SVR(base_model.BaseModel):
 
         # TODO: comment in data loading
         # load the data
-        # self.load_data(self, config)
+        self.load_data(config)
 
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
@@ -137,12 +137,8 @@ class IM_SVR(base_model.BaseModel):
     def load_checkpoint(self):
         # load previous checkpoint
         if not self.checkpoint_loaded:
-            checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
-            if os.path.exists(checkpoint_txt):
-                fin = open(checkpoint_txt)
-                model_dir = fin.readline().strip()
-                fin.close()
-                self.im_network.load_state_dict(torch.load(model_dir))
+            if os.path.exists(self.checkpoint_dir):
+                self.im_network.load_state_dict(torch.load(self.checkpoint_dir))
                 print(" [*] Load SUCCESS")
                 self.checkpoint_loaded = True
                 return
