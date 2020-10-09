@@ -96,6 +96,7 @@ class IM_SVR_DD(IM_SVR):
 
     # output shape as ply
     def create_model_mesh(self, batch_view, num, config):
+        # TODO: uncomment load checkpoint
         # load previous checkpoint
         self.load_checkpoint()
 
@@ -121,12 +122,12 @@ class IM_SVR_DD(IM_SVR):
         :return:
         '''
         imgo = img[:, :, :3]
-        imgo = cv2.cvtColor(imgo, cv2.COLOR_BGR2GRAY)
-        imga = (img[:, :, 3]) / 255.0
-        img_out = imgo * imga + 255.0 * (1 - imga)
-        img_out = np.round(img_out).astype(np.uint8)
+        imgo = cv2.cvtColor(imgo, cv2.COLOR_BGR2GRAY) * 255.
+        # imga = (img[:, :, 3]) / 255.0
+        # img_out = imgo * imga + 255.0 * (1 - imga)
+        # img_out = np.round(img_out).astype(np.uint8)
 
-        img_out = img_out[np.newaxis, :, :]
+        img_out = imgo[np.newaxis, :, :].astype(np.float32) / 255.
 
         return img_out
 
@@ -135,7 +136,7 @@ class IM_SVR_DD(IM_SVR):
 
         # get image transform
         R, T = look_at_view_transform(
-            dist=shapenet_cam_params["distance"][param_num],
+            dist=shapenet_cam_params["distance"][param_num]*5,
             elev=shapenet_cam_params["elevation"][param_num],
             azim=shapenet_cam_params["azimuth"][param_num])
 
@@ -146,7 +147,7 @@ class IM_SVR_DD(IM_SVR):
                                         )
 
         raster_settings = RasterizationSettings(
-            image_size=512,
+            image_size=128,
             blur_radius=0.0,
             faces_per_pixel=1,
         )
@@ -179,10 +180,15 @@ class IM_SVR_DD(IM_SVR):
         interpol_mesh = Meshes(verts, faces, textures)
 
         image = renderer(interpol_mesh).cpu().numpy()
+        print(image.shape)
 
         reformatted_image = self.cv2_image_transform(image[0])
+        print(reformatted_image.min())
 
-        out = torch.from_numpy(reformatted_image).to(self.device)
+        out = torch.from_numpy(reformatted_image).unsqueeze(0).type(torch.float32).to(self.device)
+
+        #print(out)
+        return out
 
     def latent_gradient(self, base_batch_view, target_batch_view, step, config):
         # zero gradients
@@ -273,6 +279,7 @@ class IM_SVR_DD(IM_SVR):
         base_batch_view = torch.autograd.Variable(base_batch_view_, requires_grad=True)
         saved_images[0, ...] = batch_view[0, ...]
 
+        # TODO: uncomment mesh save
         self.create_model_mesh(base_batch_view, 'base', config)
 
         # TODO: remove dummy data
@@ -281,6 +288,7 @@ class IM_SVR_DD(IM_SVR):
         target_batch_view = torch.from_numpy(batch_view).type(torch.float32).to(self.device)
         saved_images[1, ...] = batch_view[0, ...]
 
+        # TODO: uncomment mesh save
         self.create_model_mesh(target_batch_view, 'target', config)
 
         # get target activation
@@ -312,16 +320,20 @@ class IM_SVR_DD(IM_SVR):
             # base_batch_view.requires_grad = True
 
             # create ply models
-            if step % 100 == 0:
-                # save model
-                self.create_model_mesh(base_batch_view, step, config)
-
-                # save image
-                ply_path = saved_images[step // 100 + 2, ...] = base_batch_view.clone().detach().cpu().numpy()[0, ...]
-
+            if (step+1) % 100 == 0:
                 if step != 0:
+                    # save image
+                    saved_images[(step) // 100 + 2, ...] = base_batch_view.clone().detach().cpu().numpy()[0, ...]
+
+                    # TODO: uncomment mesh save
+                    # save model
+                    ply_path = self.create_model_mesh(base_batch_view, step, config)
+
                     # get a new annealing model image
-                    base_batch_view = self.annealing_view(ply_path=ply_path)
+                    with torch.no_grad():
+                        base_batch_view.data = self.annealing_view(ply_path=ply_path)
+
+                    base_batch_view.data
 
             end_time = time.perf_counter()
             print('Completed dream {} in {} seconds'.format(step, end_time - start_time))

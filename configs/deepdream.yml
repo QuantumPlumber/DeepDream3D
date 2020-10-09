@@ -21,10 +21,10 @@ ae: null
 #getz: null
 
 # True for interpolating latent codes
-interpol: null
+#interpol: null
 
 # True for deepdream
-#deepdream: null
+deepdream: null
 
 
 # --------------- training -------------------------------
