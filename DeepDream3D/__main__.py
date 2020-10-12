@@ -5,11 +5,11 @@ import yaml
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-import numpy as np
 
-from DeepDream3D.ModelDefinition.modelAE import IM_AE
-from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
+# from DeepDream3D.ModelDefinition.modelAE import IM_AE
+# from DeepDream3D.ModelDefinition.modelSVR import IM_SVR
 from DeepDream3D.ModelDefinition.modelAE_DD import IM_AE_DD
+from DeepDream3D.ModelDefinition.modelSVR_DD import IM_SVR_DD
 
 parser = argparse.ArgumentParser(conflict_handler='resolve')
 
@@ -22,8 +22,6 @@ parser = argparse.ArgumentParser(conflict_handler='resolve')
 
 parser.add_argument("--ae", action='store_true', dest="ae", default=False, help="True for ae [False]")
 parser.add_argument("--svr", action='store_true', dest="svr", default=False, help="True for svr [False]")
-parser.add_argument("--deepdream", action='store_true', dest="deepdream", default=False,
-                    help="True for deepdream [False]")
 
 # --------------- specify model mode -------------------------------
 
@@ -33,6 +31,8 @@ parser.add_argument("--getz", action='store_true', dest="getz", default=False,
                     help="True for getting latent codes [False]")
 parser.add_argument("--interpol", action='store_true', dest="interpol", default=False,
                     help="True for getting latent codes [False]")
+parser.add_argument("--deepdream", action='store_true', dest="deepdream", default=False,
+                    help="True for deepdream [False]")
 
 # --------------- training -------------------------------
 
@@ -106,32 +106,32 @@ if not os.path.exists(FLAGS.sample_dir):
     os.makedirs(FLAGS.sample_dir)
 
 if FLAGS.ae:
-    im_ae = IM_AE(FLAGS)
+    im_ae = IM_AE_DD(FLAGS)
 
     if FLAGS.train:
         im_ae.train(FLAGS)
     elif FLAGS.getz:
         im_ae.get_z(FLAGS)
+    elif FLAGS.interpol:
+        im_ae.interpolate_z(FLAGS)
+    elif FLAGS.deepdream:
+        im_ae.deep_dream(FLAGS)
     else:
         # im_ae.test_mesh(FLAGS)
         im_ae.test_mesh_point(FLAGS)
 
 elif FLAGS.svr:
-    im_svr = IM_SVR(FLAGS)
+    im_svr = IM_SVR_DD(FLAGS)
 
     if FLAGS.train:
         im_svr.train(FLAGS)
+    elif FLAGS.interpol:
+        im_svr.interpolate_z(FLAGS)
+    elif FLAGS.deepdream:
+        im_svr.image_deepdream(FLAGS)
     else:
         # im_svr.test_mesh(FLAGS)
         im_svr.test_mesh_point(FLAGS)
-
-elif FLAGS.deepdream:
-    im_ae_dd = IM_AE_DD(FLAGS)
-
-    if FLAGS.interpol:
-        im_ae_dd.interpolate_z(FLAGS)
-    else:
-        im_ae_dd.deep_dream(FLAGS)
 
 else:
     print("Please specify a model type?")

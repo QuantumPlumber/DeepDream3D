@@ -6,10 +6,10 @@
 # Choose one
 
 # True for ae [False]
-ae: null
+#ae: null
 
 # True for svr
-#svr: null
+svr: null
 
 # --------------- specify model mode-------------------------------
 # Choose one, no choice produces default behavior of each model
@@ -25,7 +25,6 @@ ae: null
 
 # True for deepdream
 deepdream: null
-
 
 # --------------- training -------------------------------
 
@@ -52,7 +51,7 @@ end: 16
 dataset: "all_vox256_img"
 
 # Directory name to save the checkpoints
-checkpoint_dir: "/data/IM-NET-pytorch/checkpoint"
+checkpoint_dir: "/data/IM-NET-pytorch/checkpoint/all_vox256_img_svr_128/IM_SVR.model-1000.pth"
 
 # Root directory of dataset [data]
 data_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
@@ -67,19 +66,19 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 1600
+interpol_z1: 300
 
 # Second Interpolation latent vector
 interpol_z2: 1500
 
 # number of steps to take between values
-interpol_steps: 10
+interpol_steps: 1000
 
 # --------------- deepdream -------------------------------
 
 # layer number to interpolate
 # layers are indexed from 1. Hook to collect derivative uses input of the following layer to capture nonlinear functions
-layer_num: 5
+layer_num: 3
 
 # dream update rate
-dream_rate: .01
+dream_rate: 0.00
