@@ -55,6 +55,8 @@ parser.add_argument("--end", action="store", dest="end", default=16, type=int,
 
 # --------------- Data and Directories -------------------------------
 
+parser.add_argument("--R2N2_dir", action="store", dest="R2N2_dir", default="/shapenet",
+                    help="R2N2_dir directory")
 parser.add_argument("--dataset", action="store", dest="dataset", default="all_vox256_img",
                     help="The name of dataset")
 parser.add_argument("--checkpoint_dir", action="store", dest="checkpoint_dir", default="checkpoint",

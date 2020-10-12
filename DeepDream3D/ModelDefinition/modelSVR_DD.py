@@ -13,7 +13,6 @@ import torch.nn.functional as F
 from torch import optim
 from torch.autograd import Variable
 
-
 from pytorch3d.io import save_ply, save_obj, load_objs_as_meshes, load_obj, load_ply
 
 from pytorch3d.structures import Meshes
@@ -29,13 +28,18 @@ from pytorch3d.renderer import (
     MeshRasterizer,
     SoftPhongShader,
     TexturesUV,
-    Textures
+    Textures,
+    TexturesVertex
 )
 
 import cv2
 
 import mcubes
+from typing import List
+
 from ..preprocessing.utils import shapenet_cam_params
+
+from .ShapeNetRendering import ShapeNetRendering
 
 from .utils import *
 from .modelSVR import IM_SVR
@@ -132,11 +136,12 @@ class IM_SVR_DD(IM_SVR):
         return img_out
 
     def annealing_view(self, ply_path):
-        param_num = self.test_idx
+        # param_num = self.test_idx
+        param_num = 7
 
         # get image transform
         R, T = look_at_view_transform(
-            dist=shapenet_cam_params["distance"][param_num]*5,
+            dist=shapenet_cam_params["distance"][param_num] * 3,
             elev=shapenet_cam_params["elevation"][param_num],
             azim=shapenet_cam_params["azimuth"][param_num])
 
@@ -187,7 +192,30 @@ class IM_SVR_DD(IM_SVR):
 
         out = torch.from_numpy(reformatted_image).unsqueeze(0).type(torch.float32).to(self.device)
 
-        #print(out)
+        # print(out)
+        return out
+
+    def annealing_view_pytorch3d(self, ply_paths: List[str]):
+
+        verts = []
+        faces = []
+        verts_rgb = []
+        for ply_path in ply_paths:
+            vert, face = load_ply(ply_path)
+            verts.append(vert.to(self.device))
+            faces.append(face.to(self.device))
+            verts_rgb.append(torch.ones_like(vert).to(self.device))
+
+        textures = TexturesVertex(verts_features=verts_rgb)
+        interpol_mesh = Meshes(verts, faces, textures)
+
+        image = self.shapenet_render.render(model_ids=[0]).cpu().numpy()
+        print(image.shape)
+
+        reformatted_image = self.cv2_image_transform(image[0])
+
+        out = torch.from_numpy(reformatted_image).unsqueeze(0).type(torch.float32).to(self.device)
+
         return out
 
     def latent_gradient(self, base_batch_view, target_batch_view, step, config):
@@ -232,11 +260,22 @@ class IM_SVR_DD(IM_SVR):
         # load previous checkpoint
         self.load_checkpoint()
 
+        # get config values
+        z_base = int(config.interpol_z1)
+        z_target = int(config.interpol_z2)
+
+        # instantiate camera rendering class
+        self.shapenet_render = ShapeNetRendering([z_base, z_target],
+                                            config.R2N2_dir,
+                                            model_views=[[self.test_idx], [self.test_idx]])
+
         # set the dreaming rate and boundary size
         self.dream_rate = config.dream_rate
+        annealing_step = 100
 
         # Set up forward hook to pull values
         self.layer_num = config.layer_num
+
         # list index includes as zero entry the generator module itself.
         # 2 layers up front should not be used
         num_model_layers = len(list(self.im_network.img_encoder.named_children())) - 2
@@ -244,18 +283,9 @@ class IM_SVR_DD(IM_SVR):
             print('Layer number is too large: select layer numbers from 2 to {}'.format(num_model_layers))
             exit(0)
 
-        # this is the way to get the model variable of interest
-        # take the last batch normalization layer in each res-net block before running through the relu
         # self.target_layer = list(list(self.im_network.img_encoder.children())[self.layer_num].children())[-1]
         self.target_layer = list(self.im_network.img_encoder.children())[self.layer_num]
         self.target_activation = [None]
-
-        # register the forward hook
-        # self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
-
-        # get config values
-        z_base = int(config.interpol_z1)
-        z_target = int(config.interpol_z2)
 
         interpol_steps = int(config.interpol_steps)
         result_base_directory = config.interpol_directory
@@ -269,7 +299,7 @@ class IM_SVR_DD(IM_SVR):
             print('creating directory ' + self.result_dir)
 
         # store images
-        num_images = interpol_steps // 100
+        num_images = interpol_steps // annealing_step
         saved_images = np.empty(shape=(num_images + 2, 1, 128, 128))
 
         # TODO: remove dummy data
@@ -292,8 +322,8 @@ class IM_SVR_DD(IM_SVR):
         self.create_model_mesh(target_batch_view, 'target', config)
 
         # get target activation
-        #z_vec_, _ = self.im_network(target_batch_view, None, None, is_training=False)
-        #self.style_activation = self.target_activation[0].data.clone().detach().squeeze()
+        # z_vec_, _ = self.im_network(target_batch_view, None, None, is_training=False)
+        # self.style_activation = self.target_activation[0].data.clone().detach().squeeze()
 
         for step in range(interpol_steps):
             start_time = time.perf_counter()
@@ -309,9 +339,8 @@ class IM_SVR_DD(IM_SVR):
             # print(torch.max(grad_step))
 
             # clamp output to min,max input values.
-            #base_batch_view.data = torch.clamp(base_batch_view.data - grad_step, min=0., max=1.)
+            # base_batch_view.data = torch.clamp(base_batch_view.data - grad_step, min=0., max=1.)
             with torch.no_grad():
-                mask = base_batch_view < .99
                 base_batch_view.data[mask] += grad_step
                 base_batch_view.clamp_(min=0, max=1)
                 # print(torch.max(grad))
@@ -320,10 +349,11 @@ class IM_SVR_DD(IM_SVR):
             # base_batch_view.requires_grad = True
 
             # create ply models
-            if (step+1) % 100 == 0:
+            if (step + 1) % annealing_step == 0:
                 if step != 0:
                     # save image
-                    saved_images[(step) // 100 + 2, ...] = base_batch_view.clone().detach().cpu().numpy()[0, ...]
+                    saved_images[step // annealing_step + 2, ...] = base_batch_view.clone().detach().cpu().numpy()[
+                        0, ...]
 
                     # TODO: uncomment mesh save
                     # save model
@@ -331,9 +361,8 @@ class IM_SVR_DD(IM_SVR):
 
                     # get a new annealing model image
                     with torch.no_grad():
-                        base_batch_view.data = self.annealing_view(ply_path=ply_path)
-
-                    base_batch_view.data
+                        #base_batch_view.data = self.annealing_view(ply_path=ply_path)
+                        base_batch_view.data = self.annealing_view_pytorch3d(ply_paths=[ply_path])
 
             end_time = time.perf_counter()
             print('Completed dream {} in {} seconds'.format(step, end_time - start_time))

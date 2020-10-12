@@ -3,6 +3,6 @@
 
 streamlit
 hdf5
-pymcubes
+PyMCubes
 pyyaml
-
+opencv-python
