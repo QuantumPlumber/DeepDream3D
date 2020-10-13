@@ -48,6 +48,9 @@ end: 16
 # --------------- Data and Directories -------------------------------
 
 # The name of dataset
+R2N2_dir: "/data/shapenet"
+
+# The name of dataset
 dataset: "all_vox256_img"
 
 # Directory name to save the checkpoints
@@ -69,16 +72,19 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 interpol_z1: 300
 
 # Second Interpolation latent vector
-interpol_z2: 1500
+interpol_z2: 1600
 
 # number of steps to take between values
-interpol_steps: 1000
+interpol_steps: 29
 
 # --------------- deepdream -------------------------------
 
 # layer number to interpolate
 # layers are indexed from 1. Hook to collect derivative uses input of the following layer to capture nonlinear functions
-layer_num: 3
+layer_num: 7
 
 # dream update rate
-dream_rate: 0.00
+dream_rate: 0.001
+
+# annealing rate, once every x steps
+annealing_rate: 1

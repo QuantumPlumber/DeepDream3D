@@ -83,9 +83,12 @@ parser.add_argument("--interpol_steps", action="store", dest="interpol_steps", t
 
 parser.add_argument("--layer_num", action="store", dest="layer_num", default=3, type=int,
                     help="activation layer to maximize")
-
 parser.add_argument("--dream_rate", action="store", dest="dream_rate", default=.01, type=float,
                     help="dream update rate")
+parser.add_argument("--annealing_rate", action="store", dest="annealing_rate", default=1, type=int,
+                    help="annealing rate")
+
+# --------------- process -------------------------------
 
 if sys.argv[1] is not None:
     with open(sys.argv[1], 'r') as stream:

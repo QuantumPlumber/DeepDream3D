@@ -103,17 +103,17 @@ class ShapeNetRendering:
         model = {}
 
         # get model based on id number in splitfile
-        with open(path.join(METADATA_DIR, self.splitfile), "r") as f:
+        with open(os.path.join(METADATA_DIR, self.splitfile), "r") as f:
             synset_lines = f.readlines()
             synset_id, model_id = synset_lines[model_num].split('/')
             model["synset_id"] = synset_id
-            model["model_id"] = model_id
+            model["model_id"] = model_id.rstrip()
 
-        model["images"] = None
-        images, Rs, Ts, voxel_RTs = [], [], [], []
-        # Retrieve R2N2's renderings if required.
+        print(model)
 
-        rendering_path = path.join(
+        Rs, Ts, voxel_RTs = [], [], []
+
+        rendering_path = os.path.join(
             self.r2n2_dir,
             self.views_rel_path,
             model["synset_id"],
@@ -122,7 +122,7 @@ class ShapeNetRendering:
         )
 
         # Read metadata file to obtain params for calibration matrices.
-        with open(path.join(rendering_path, "rendering_metadata.txt"), "r") as f:
+        with open(os.path.join(rendering_path, "rendering_metadata.txt"), "r") as f:
             metadata_lines = f.readlines()
         for i in model_views:
             # Get camera calibration.
@@ -148,7 +148,7 @@ class ShapeNetRendering:
                 [0.0, 0.0, 1.0, 0.0],
             ]
         )
-        model["images"] = torch.stack(images)
+
         model["R"] = torch.stack(Rs)
         model["T"] = torch.stack(Ts)
         model["K"] = K.expand(len(model_views), 4, 4)
@@ -210,7 +210,7 @@ class ShapeNetRendering:
         """
 
         # unpack values for models
-        r_, t_, k_, mesh_ = [], [], [], []
+        r_, t_, k_ = [], [], []
         for id in model_ids:
             r_.append(self.models[id]["R"])
             t_.append(self.models[id]["T"])
@@ -234,6 +234,9 @@ class ShapeNetRendering:
             # When rendering R2N2 models, if more than one views are provided, broadcast
             # the meshes so that each mesh can be rendered for each of the views.
             meshes = meshes.extend(len(cameras) // len(meshes))
+
+        print(meshes.isempty())
+        print(meshes.num_verts_per_mesh())
 
         raster_settings = RasterizationSettings(
             image_size=128,
