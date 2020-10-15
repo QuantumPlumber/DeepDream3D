@@ -55,6 +55,8 @@ parser.add_argument("--end", action="store", dest="end", default=16, type=int,
 
 # --------------- Data and Directories -------------------------------
 
+parser.add_argument("--R2N2_dir", action="store", dest="R2N2_dir", default="/shapenet",
+                    help="R2N2_dir directory")
 parser.add_argument("--dataset", action="store", dest="dataset", default="all_vox256_img",
                     help="The name of dataset")
 parser.add_argument("--checkpoint_dir", action="store", dest="checkpoint_dir", default="checkpoint",
@@ -70,8 +72,12 @@ parser.add_argument("--interpol_directory", action="store", dest="interpol_direc
 
 parser.add_argument("--interpol_z1", action="store", dest="interpol_z1", type=int, default=0,
                     help="First Interpolation latent vector")
+parser.add_argument("--z1_im_view", action="store", dest="z1_im_view", type=int, default=23,
+                    help="First image number to deep dream with")
 parser.add_argument("--interpol_z2", action="store", dest="interpol_z2", type=int, default=1,
                     help="Second Interpolation latent vector")
+parser.add_argument("--z2_im_view", action="store", dest="z2_im_view", type=int, default=23,
+                    help="Second image number to deep dream with")
 parser.add_argument("--interpol_steps", action="store", dest="interpol_steps", type=int, default=5,
                     help="number of steps to take between values")
 
@@ -81,9 +87,12 @@ parser.add_argument("--interpol_steps", action="store", dest="interpol_steps", t
 
 parser.add_argument("--layer_num", action="store", dest="layer_num", default=3, type=int,
                     help="activation layer to maximize")
-
 parser.add_argument("--dream_rate", action="store", dest="dream_rate", default=.01, type=float,
                     help="dream update rate")
+parser.add_argument("--annealing_rate", action="store", dest="annealing_rate", default=1, type=int,
+                    help="annealing rate")
+
+# --------------- process -------------------------------
 
 if sys.argv[1] is not None:
     with open(sys.argv[1], 'r') as stream:

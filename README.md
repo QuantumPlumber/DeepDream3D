@@ -1,16 +1,24 @@
-# Insight_Project_Framework
-Framework for machine learning projects at Insight Data Science.
+# DeepDream3D
+This is a project exploring the concept of [DeepDream](https://github.com/google/deepdream.git) applied to 
+3D deep learning generative modeling. Specifically, the [IM-NET](https://github.com/czq142857/implicit-decoder.git) model.
+The DeepDream3D module is an encapsulation of the code provided 
+by the IM-NET team, with extended functionality to enable deep dreaming. 
 
-## Motivation for this project format:
-- **Insight_Project_Framework** : Put all source code for production within structured directory
-- **tests** : Put all source code for testing in an easy to find location
-- **configs** : Enable modification of all preset variables within single directory (consisting of one or many config files for separate tasks)
-- **data** : Include example a small amount of data in the Github repository so tests can be run to validate installation
-- **build** : Include scripts that automate building of a standalone environment
-- **static** : Any images or content to include in the README or web framework if part of the pipeline
+## Project Format:
+The code from IM-NET has been re-factored into a base model class which is subclassed into the two archetypes,
+the auto encoder (AE) and single view reconstruction (SVR). These models are further subclassed into deep dreaming 
+classes AE_DD and SVR_DD. The DeepDream3D routine requires rendering the models in the identical way
+as the original ShapeNetV2 renderings used for training. The Facebook Research team has put together a project for
+working in the 3D modeling space: PyTorch3D. Their implementation of the standard rendering scheme is deployed in the
+dreaming loop. 
 
 ## Setup
-Clone repository and update python path
+You can install the module using pip:
+```
+pip install DeepDream3D
+```
+
+Or clone repository and update python path
 ```
 repo_name=Insight_Project_Framework # URL of your new repository
 username=mrubash1 # Username for your personal github account
@@ -20,41 +28,31 @@ echo "export $repo_name=${PWD}" >> ~/.bash_profile
 echo "export PYTHONPATH=$repo_name/src:${PYTHONPATH}" >> ~/.bash_profile
 source ~/.bash_profile
 ```
-Create new development branch and switch onto it
-```
-branch_name=dev-readme_requisites-20180905 # Name of development branch, of the form 'dev-feature_name-date_of_creation'}}
-git checkout -b $branch_name
-```
-
-## Initial Commit
-Lets start with a blank slate: remove `.git` and re initialize the repo
-```
-cd $repo_name
-rm -rf .git   
-git init   
-git status
-```  
-You'll see a list of file, these are files that git doesn't recognize. At this point, feel free to change the directory names to match your project. i.e. change the parent directory Insight_Project_Framework and the project directory Insight_Project_Framework:
-Now commit these:
-```
-git add .
-git commit -m "Initial commit"
-git push origin $branch_name
-```
-
-## Requisites
-
-- List all packages and software needed to build the environment
-- This could include cloud command line tools (i.e. gsutil), package managers (i.e. conda), etc.
 
 #### Dependencies
 
-- [Streamlit](streamlit.io)
+The following notable packages are required to run successfully:
 
-#### Installation
-To install the package above, pleae run:
+- [Streamlit](https://www.streamlit.io/)
+- [pymcubes](https://pypi.org/project/PyMCubes/)
+- [openCV](https://pypi.org/project/opencv-python/)
+
+To install these package and others, pleae run:
 ```shell
 pip install -r requiremnts
+```
+
+**Additionally, you must install:** 
+
+- [PyTorch3D](https://github.com/facebookresearch/pytorch3d/blob/master/INSTALL.md)
+
+Follow the directions according to the link as it pertains to your environment.
+
+ShapeNet v2 is also needed to re-render training data and to extract camera parameters for each
+model.
+
+```
+wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O [your/path/to/destination/dir]
 ```
 
 ## Build Environment
@@ -70,22 +68,38 @@ pip install -r requiremnts
 # Step 2
 ```
 
-## Configs
-- We recommond using either .yaml or .txt for your config files, not .json
-- **DO NOT STORE CREDENTIALS IN THE CONFIG DIRECTORY!!**
-- If credentials are needed, use environment variables or HashiCorp's [Vault](https://www.vaultproject.io/)
+## Running the code
+
+### Configs
 
 
-## Test
-- Include instructions for how to run all tests after the software is installed
+### Test
+- You can test the models by running the following commands:
 ```
-# Example
+# Test IM_AE: Navigate to the bash run script directory
 
-# Step 1
-# Step 2
+./test_ae.sh
+```
+```
+# Test IM_AE: Navigate to the bash run script directory
+
+./test_svr.sh
 ```
 
-## Run Inference
+```
+# Test IM_AE: Navigate to the bash run script directory
+
+./deepdream_test.sh
+```
+
+```
+# Test IM_AE: Navigate to the bash run script directory
+
+./deepdream_svr_test.sh
+```
+
+
+### Run Inference
 - Include instructions on how to run inference
 - i.e. image classification on a single image for a CNN deep learning project
 ```
@@ -95,7 +109,7 @@ pip install -r requiremnts
 # Step 2
 ```
 
-## Build Model
+### Build Model
 - Include instructions of how to build the model
 - This can be done either locally or on the cloud
 ```
@@ -105,7 +119,7 @@ pip install -r requiremnts
 # Step 2
 ```
 
-## Serve Model
+### Serve Model
 - Include instructions of how to set up a REST or RPC endpoint
 - This is for running remote inference via a custom model
 ```
@@ -115,7 +129,7 @@ pip install -r requiremnts
 # Step 2
 ```
 
-## Analysis
+### Analysis
 - Include some form of EDA (exploratory data analysis)
 - And/or include benchmarking of the model and results
 ```

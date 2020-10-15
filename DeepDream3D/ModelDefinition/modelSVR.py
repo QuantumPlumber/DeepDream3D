@@ -20,8 +20,6 @@ import DeepDream3D.ModelDefinition.base_model as base_model
 
 # pytorch 1.2.0 implementation
 
-
-
 class im_network(nn.Module):
     def __init__(self, img_ef_dim, gf_dim, z_dim, point_dim):
         super(im_network, self).__init__()
@@ -65,7 +63,7 @@ class IM_SVR(base_model.BaseModel):
 
         # TODO: comment in data loading
         # load the data
-        self.load_data(config)
+        # self.load_data(config)
 
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
@@ -147,6 +145,10 @@ class IM_SVR(base_model.BaseModel):
                 exit(0)
 
     def train(self, config):
+
+        # load full data
+        self.load_data(config)
+
         # load AE weights
         checkpoint_txt = os.path.join(self.checkpoint_AE_path, "checkpoint")
         if os.path.exists(checkpoint_txt):
@@ -390,6 +392,10 @@ class IM_SVR(base_model.BaseModel):
 
     # output shape as ply
     def test_mesh(self, config):
+
+        # load full data
+        self.load_data(config)
+
         # load previous checkpoint
         checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
         if os.path.exists(checkpoint_txt):
@@ -419,6 +425,10 @@ class IM_SVR(base_model.BaseModel):
 
     # output shape as ply and point cloud as ply
     def test_mesh_point(self, config):
+
+        # load full data
+        self.load_data(config)
+
         # load previous checkpoint
         checkpoint_txt = os.path.join(self.checkpoint_path, "checkpoint")
         if os.path.exists(checkpoint_txt):
