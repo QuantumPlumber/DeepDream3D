@@ -182,6 +182,8 @@ class IM_SVR_DD(IM_SVR):
         # img_out = np.round(img_out).astype(np.uint8)
         # print(img_out.shape)
 
+        img_out = cv2.resize(img_out, dsize=(128, 128))
+
         img_out = img_out[np.newaxis, :, :].astype(np.float32)
 
         return img_out
@@ -256,8 +258,9 @@ class IM_SVR_DD(IM_SVR):
             verts.append(vert.to(self.device))
             faces.append(face.to(self.device))
             verts_rgb.append(torch.ones_like(vert).to(self.device))
+            #verts_rgb.append(torch.rand(size=vert.size()).to(self.device))
 
-        textures = TexturesVertex(verts_features=verts_rgb)
+        textures = Textures(verts_rgb=verts_rgb)
         interpol_mesh = Meshes(verts, faces, textures)
 
         # print(interpol_mesh.isempty())
@@ -322,12 +325,14 @@ class IM_SVR_DD(IM_SVR):
 
         # get config values
         z_base = int(config.interpol_z1)
+        base_im_num = int(config.z1_im_view)
         z_target = int(config.interpol_z2)
+        target_im_num = int(config.z1_im_view)
 
         # instantiate camera rendering class
         self.shapenet_render = ShapeNetRendering([z_base, z_target],
                                                  config.R2N2_dir,
-                                                 model_views=[[self.test_idx], [self.test_idx]],
+                                                 model_views=[[base_im_num], [target_im_num]],
                                                  )
 
         # set the dreaming rate and boundary size
@@ -366,7 +371,7 @@ class IM_SVR_DD(IM_SVR):
 
         # TODO: remove dummy data
         # batch_view = np.random.random(size=(1, 1, 128, 128))
-        batch_view = self.data_pixels[0:1, self.test_idx, ...].astype(np.float32) / 255.0
+        batch_view = self.data_pixels[0:1, base_im_num, ...].astype(np.float32) / 255.0
         base_batch_view_ = torch.from_numpy(batch_view).type(torch.float32).to(self.device)
         base_batch_view = torch.autograd.Variable(base_batch_view_, requires_grad=True)
         deepdream_images[0, ...] = batch_view[0, ...]
@@ -376,7 +381,7 @@ class IM_SVR_DD(IM_SVR):
 
         # TODO: remove dummy data
         # batch_view = np.random.random(size=(1, 1, 128, 128))
-        batch_view = self.data_pixels[1:2, self.test_idx, ...].astype(np.float32) / 255.0
+        batch_view = self.data_pixels[1:2, target_im_num, ...].astype(np.float32) / 255.0
         target_batch_view = torch.from_numpy(batch_view).type(torch.float32).to(self.device)
         deepdream_images[1, ...] = batch_view[0, ...]
 
@@ -406,6 +411,8 @@ class IM_SVR_DD(IM_SVR):
             #grad[grad < grad_mean - grad_var] = 0
 
             grad_step = grad * self.dream_rate / torch.abs(grad_mean)
+
+            #grad_step = self.dream_rate * (grad - grad_mean) / grad_var
             #print(grad_step.shape)
 
             # print(torch.max(grad_step))

@@ -1,0 +1,33 @@
+FROM 763104351884.dkr.ecr.us-west-1.amazonaws.com/pytorch-training:1.6.0-gpu-py36-cu101-ubuntu16.04
+
+# Set the working directory.
+WORKDIR /usr/DeepDream3D
+
+# Copy project over
+COPY . .
+
+# set up the shell to run in the conda base environment
+# all pip installs will run in the base environment
+# SHELL ["conda", "run", "-n", "base", "/bin/bash", "-c"]
+SHELL [ "/bin/bash", "--login", "-c" ]
+
+# now set up conda in the shell...
+
+# enable conda activate command
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.profile
+
+#configure conda shell
+RUN conda init bash
+
+# install requirements in the conda base
+RUN conda activate base && \
+pip install -U fvcore && \
+pip install pytorch3d && \
+pip install -r requirements.txt && \
+pip uninstall -y torch && \
+pip uninstall -y torchvision && \
+pip install torchvision && \
+pip install torch
+
+# expose a port for streamlit or for jupyter notebooks
+EXPOSE 8000

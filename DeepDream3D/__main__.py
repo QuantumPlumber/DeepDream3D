@@ -72,8 +72,12 @@ parser.add_argument("--interpol_directory", action="store", dest="interpol_direc
 
 parser.add_argument("--interpol_z1", action="store", dest="interpol_z1", type=int, default=0,
                     help="First Interpolation latent vector")
+parser.add_argument("--z1_im_view", action="store", dest="z1_im_view", type=int, default=23,
+                    help="First image number to deep dream with")
 parser.add_argument("--interpol_z2", action="store", dest="interpol_z2", type=int, default=1,
                     help="Second Interpolation latent vector")
+parser.add_argument("--z2_im_view", action="store", dest="z2_im_view", type=int, default=23,
+                    help="Second image number to deep dream with")
 parser.add_argument("--interpol_steps", action="store", dest="interpol_steps", type=int, default=5,
                     help="number of steps to take between values")
 

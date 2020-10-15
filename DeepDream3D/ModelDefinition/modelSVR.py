@@ -20,8 +20,6 @@ import DeepDream3D.ModelDefinition.base_model as base_model
 
 # pytorch 1.2.0 implementation
 
-
-
 class im_network(nn.Module):
     def __init__(self, img_ef_dim, gf_dim, z_dim, point_dim):
         super(im_network, self).__init__()

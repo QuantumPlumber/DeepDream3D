@@ -239,7 +239,7 @@ class ShapeNetRendering:
         print(meshes.num_verts_per_mesh())
 
         raster_settings = RasterizationSettings(
-            image_size=128,
+            image_size=512,
             blur_radius=0.0,
             faces_per_pixel=1
         )
