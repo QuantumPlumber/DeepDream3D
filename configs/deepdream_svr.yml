@@ -53,6 +53,10 @@ R2N2_dir: "/data/shapenet"
 # The name of dataset
 dataset: "all_vox256_img"
 
+# Directory where train and test splits are found:
+# *** Relative to project folder ***
+splitfile: "data/metadata/all_vox256_img_test.txt"
+
 # Directory name to save the checkpoints
 checkpoint_dir: "/data/IM-NET-pytorch/checkpoint/all_vox256_img_svr_128/IM_SVR.model-1000.pth"
 

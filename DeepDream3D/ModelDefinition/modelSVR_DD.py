@@ -113,6 +113,76 @@ class IM_SVR_DD(IM_SVR):
         else:
             print("z_num not a valid number")
 
+    def interpolate_z(self, config):
+        '''
+        A method to create the meshes from latent z vectors linearly interpolated between two vectors.
+
+        :param config:
+        :return:
+        '''
+
+        # TODO: uncomment load data
+        super().load_data(config=config)
+
+        # TODO: load previous checkpoint
+        self.load_checkpoint()
+
+        z1 = int(config.interpol_z1)
+        z2 = int(config.interpol_z2)
+        interpol_steps = int(config.interpol_steps)
+        result_base_directory = config.interpol_directory
+        self.result_dir_name = 'interpol_' + str(z1) + '_' + str(z2)
+        self.result_dir = result_base_directory + '/' + self.result_dir_name
+        print(self.result_dir)
+
+        # Create output directory
+        if not os.path.isdir(self.result_dir):
+            os.mkdir(self.result_dir)
+            print('creating directory ' + self.result_dir)
+
+        # get latent vectors from hdf5
+        # hdf5_path = self.checkpoint_dir + '/' + self.model_dir + '/' + self.dataset_name + '_train_z.hdf5'
+        # hdf5_file = h5py.File(hdf5_path, mode='r')
+        # num_z = hdf5_file["zs"].shape[0]
+
+        # get the z vectors via forward pass through encoder
+        z1_vec = self.get_zvec(z1)
+        z2_vec = self.get_zvec(z2)
+
+        # compute linear interpolation between vectors
+        fraction = np.linspace(0, 1, interpol_steps)
+        interpolated_z = np.multiply.outer(np.ones_like(fraction), z1_vec) + np.multiply.outer(fraction,
+                                                                                               z2_vec - z1_vec)
+        interpolated_z = interpolated_z.astype(np.float64)
+
+        self.out_filenames = []
+        for z_index in np.arange(interpol_steps):
+            self.out_filenames.append(self.result_dir + "/" + "out_{:.2f}.ply".format(fraction[z_index]))
+
+        for z_index in np.arange(interpol_steps):
+            start_time = time.time()
+            model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
+            # print('current latent vector:')
+            # print(model_z.shape)
+
+            model_z = torch.from_numpy(model_z).float()
+            model_z = model_z.to(self.device)
+            model_float = self.z2voxel(model_z)
+            # img1 = np.clip(np.amax(model_float, axis=0)*256, 0,255).astype(np.uint8)
+            # img2 = np.clip(np.amax(model_float, axis=1)*256, 0,255).astype(np.uint8)
+            # img3 = np.clip(np.amax(model_float, axis=2)*256, 0,255).astype(np.uint8)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_1t.png",img1)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_2t.png",img2)
+            # cv2.imwrite(config.sample_dir+"/"+str(t)+"_3t.png",img3)
+
+            vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+            vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+            # vertices = self.optimize_mesh(vertices,model_z)
+            write_ply_triangle(self.result_dir + "/" + "out_{:.2f}.ply".format(fraction[z_index]), vertices, triangles)
+
+            end_time = time.time() - start_time
+            print("computed interpolation {} in {} seconds".format(z_index, end_time))
+
     def create_saved_images(self, images, name):
         num_images = int(images.shape[0])
         cols = 3
@@ -314,7 +384,7 @@ class IM_SVR_DD(IM_SVR):
 
         return base_batch_view.grad
 
-    def image_deepdream(self, config):
+    def deep_dream(self, config):
 
         # TODO: uncomment load data
         self.load_data(config)
@@ -330,9 +400,10 @@ class IM_SVR_DD(IM_SVR):
         target_im_num = int(config.z1_im_view)
 
         # instantiate camera rendering class
-        self.shapenet_render = ShapeNetRendering([z_base, z_target],
-                                                 config.R2N2_dir,
+        self.shapenet_render = ShapeNetRendering(model_nums=[z_base, z_target],
+                                                 R2N2_dir=config.R2N2_dir,
                                                  model_views=[[base_im_num], [target_im_num]],
+                                                 splitfile=config.splitfile
                                                  )
 
         # set the dreaming rate and boundary size

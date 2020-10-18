@@ -2,7 +2,7 @@ import argparse
 import yaml
 import sys
 
-default_yml = '../configs/default_config.yml'
+default_yml = '../configs/default_config_ae.yml'
 args = [None, default_yml]
 
 
