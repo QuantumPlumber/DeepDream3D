@@ -113,6 +113,68 @@ class IM_SVR_DD(IM_SVR):
         else:
             print("z_num not a valid number")
 
+    def interpolate_z(self, config):
+        '''
+        A method to create the meshes from latent z vectors linearly interpolated between two vectors.
+
+        :param config:
+        :return:
+        '''
+
+        # TODO: uncomment load data
+        super().load_data(config=config)
+
+        # TODO: load previous checkpoint
+        self.load_checkpoint()
+
+        z1 = int(config.interpol_z1)
+        z2 = int(config.interpol_z2)
+        interpol_steps = int(config.interpol_steps)
+        result_base_directory = config.interpol_directory
+        self.result_dir_name = 'interpol_' + str(z1) + '_' + str(z2)
+        self.result_dir = result_base_directory + '/' + self.result_dir_name
+        print(self.result_dir)
+
+        # Create output directory
+        if not os.path.isdir(self.result_dir):
+            os.mkdir(self.result_dir)
+            print('creating directory ' + self.result_dir)
+
+        # get the z vectors via forward pass through encoder
+        z1_vec = self.get_zvec(z1)
+        print(z1_vec)
+        z2_vec = self.get_zvec(z2)
+        print(z2_vec)
+
+        # compute linear interpolation between vectors
+        fraction = np.linspace(0, 1, interpol_steps)
+        interpolated_z = np.multiply.outer(np.ones_like(fraction), z1_vec) + np.multiply.outer(fraction,
+                                                                                               z2_vec - z1_vec)
+        interpolated_z = interpolated_z.astype(np.float64)
+
+        self.out_filenames = []
+        for z_index in np.arange(interpol_steps):
+            self.out_filenames.append(self.result_dir + "/" + "out_{:.2f}.ply".format(fraction[z_index]))
+
+        for z_index in np.arange(interpol_steps):
+            start_time = time.time()
+            model_z = interpolated_z[z_index:z_index + 1].astype(np.float64)
+            # print('current latent vector:')
+            # print(model_z.shape)
+
+            model_z = torch.from_numpy(model_z).float()
+            model_z = model_z.to(self.device)
+            self.im_network.eval()
+            model_float = self.z2voxel(model_z)
+
+            vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
+            vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
+            # vertices = self.optimize_mesh(vertices,model_z)
+            write_ply_triangle(self.result_dir + "/" + "out_{:.2f}.ply".format(fraction[z_index]), vertices, triangles)
+
+            end_time = time.time() - start_time
+            print("computed interpolation {} in {} seconds".format(z_index, end_time))
+
     def create_saved_images(self, images, name):
         num_images = int(images.shape[0])
         cols = 3
@@ -150,6 +212,7 @@ class IM_SVR_DD(IM_SVR):
         print('model_float shape')
         print(model_float.shape)
 
+        # This transform nescessary to accomodate coordinate transform induced in marching cubes
         model_float = np.flip(np.transpose(model_float, (2, 1, 0)), 0)
 
         vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
@@ -258,7 +321,7 @@ class IM_SVR_DD(IM_SVR):
             verts.append(vert.to(self.device))
             faces.append(face.to(self.device))
             verts_rgb.append(torch.ones_like(vert).to(self.device))
-            #verts_rgb.append(torch.rand(size=vert.size()).to(self.device))
+            # verts_rgb.append(torch.rand(size=vert.size()).to(self.device))
 
         textures = Textures(verts_rgb=verts_rgb)
         interpol_mesh = Meshes(verts, faces, textures)
@@ -279,20 +342,14 @@ class IM_SVR_DD(IM_SVR):
         return out
 
     def latent_gradient(self, base_batch_view, target_batch_view, step, config):
-        # zero gradients
-        self.im_network.zero_grad()
 
-        # re-register forward hook on each forward pass.
-        self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
-
-        z_vec_, _ = self.im_network(target_batch_view, None, None, is_training=False)
-        style_activation = self.target_activation[0].detach().clone().squeeze()
+        style_activation = self.style_activation.clone()
 
         # zero gradients
         self.im_network.zero_grad()
 
         # re-register forward hook on each forward pass.
-        self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
+        # self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
 
         z_vec_, _ = self.im_network(base_batch_view, None, None, is_training=False)
         base_activation = self.target_activation[0]
@@ -314,10 +371,10 @@ class IM_SVR_DD(IM_SVR):
 
         return base_batch_view.grad
 
-    def image_deepdream(self, config):
+    def deep_dream(self, config):
 
         # TODO: uncomment load data
-        self.load_data(config)
+        super().load_data(config)
 
         # TODO: uncomment checkpoint load
         # load previous checkpoint
@@ -330,9 +387,10 @@ class IM_SVR_DD(IM_SVR):
         target_im_num = int(config.z1_im_view)
 
         # instantiate camera rendering class
-        self.shapenet_render = ShapeNetRendering([z_base, z_target],
-                                                 config.R2N2_dir,
+        self.shapenet_render = ShapeNetRendering(model_nums=[z_base, z_target],
+                                                 R2N2_dir=config.R2N2_dir,
                                                  model_views=[[base_im_num], [target_im_num]],
+                                                 splitfile=config.splitfile
                                                  )
 
         # set the dreaming rate and boundary size
@@ -349,9 +407,13 @@ class IM_SVR_DD(IM_SVR):
             print('Layer number is too large: select layer numbers from 2 to {}'.format(num_model_layers))
             exit(0)
 
+        # Get target layer
         # self.target_layer = list(list(self.im_network.img_encoder.children())[self.layer_num].children())[-1]
         self.target_layer = list(self.im_network.img_encoder.children())[self.layer_num]
         self.target_activation = [None]
+
+        # register forward hook
+        self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
 
         interpol_steps = int(config.interpol_steps)
         result_base_directory = config.interpol_directory
@@ -371,7 +433,7 @@ class IM_SVR_DD(IM_SVR):
 
         # TODO: remove dummy data
         # batch_view = np.random.random(size=(1, 1, 128, 128))
-        batch_view = self.data_pixels[0:1, base_im_num, ...].astype(np.float32) / 255.0
+        batch_view = self.data_pixels[z_base:z_base + 1, base_im_num, ...].astype(np.float32) / 255.0
         base_batch_view_ = torch.from_numpy(batch_view).type(torch.float32).to(self.device)
         base_batch_view = torch.autograd.Variable(base_batch_view_, requires_grad=True)
         deepdream_images[0, ...] = batch_view[0, ...]
@@ -381,7 +443,7 @@ class IM_SVR_DD(IM_SVR):
 
         # TODO: remove dummy data
         # batch_view = np.random.random(size=(1, 1, 128, 128))
-        batch_view = self.data_pixels[1:2, target_im_num, ...].astype(np.float32) / 255.0
+        batch_view = self.data_pixels[z_target:z_target + 1, target_im_num, ...].astype(np.float32) / 255.0
         target_batch_view = torch.from_numpy(batch_view).type(torch.float32).to(self.device)
         deepdream_images[1, ...] = batch_view[0, ...]
 
@@ -389,8 +451,8 @@ class IM_SVR_DD(IM_SVR):
         self.create_model_mesh(target_batch_view, 'target', config)
 
         # get target activation
-        # z_vec_, _ = self.im_network(target_batch_view, None, None, is_training=False)
-        # self.style_activation = self.target_activation[0].data.clone().detach().squeeze()
+        z_vec_, _ = self.im_network(target_batch_view, None, None, is_training=False)
+        self.style_activation = self.target_activation[0].data.clone().detach().squeeze()
 
         for step in range(interpol_steps):
             start_time = time.perf_counter()
@@ -401,19 +463,19 @@ class IM_SVR_DD(IM_SVR):
             grad = self.latent_gradient(base_batch_view, target_batch_view, step, config)
             grad = grad[mask]
 
-            #print(grad.shape)
+            # print(grad.shape)
 
             # mask low value fluctuations, one standard deviation below mean
             grad_mean = grad.mean()
-            #print(grad_mean)
-            grad_var = torch.pow(torch.mean(torch.pow(grad-grad_mean, 2)), .5)
-            #print(grad_var)
-            #grad[grad < grad_mean - grad_var] = 0
+            # print(grad_mean)
+            grad_var = torch.pow(torch.mean(torch.pow(grad - grad_mean, 2)), .5)
+            # print(grad_var)
+            # grad[grad < grad_mean - grad_var] = 0
 
             grad_step = grad * self.dream_rate / torch.abs(grad_mean)
 
-            #grad_step = self.dream_rate * (grad - grad_mean) / grad_var
-            #print(grad_step.shape)
+            # grad_step = self.dream_rate * (grad - grad_mean) / grad_var
+            # print(grad_step.shape)
 
             # print(torch.max(grad_step))
 

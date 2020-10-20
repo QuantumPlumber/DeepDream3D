@@ -5,7 +5,6 @@
 #sudo docker login --username AWS -p $(aws ecr get-login-password --region us-west-1) 850965295882.dkr.ecr.us-west-1.amazonaws.com
 
 # for us-west-1 deep learning repos
-
 sudo docker login --username AWS -p $(aws ecr get-login-password --region us-west-1) 763104351884.dkr.ecr.us-west-1.amazonaws.com
 
 # pull pytorch p36

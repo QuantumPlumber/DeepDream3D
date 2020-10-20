@@ -37,7 +37,7 @@ The following notable packages are required to run successfully:
 - [pymcubes](https://pypi.org/project/PyMCubes/)
 - [openCV](https://pypi.org/project/opencv-python/)
 
-To install these package and others, pleae run:
+To install these package and others, please run:
 ```shell
 pip install -r requiremnts
 ```
@@ -50,6 +50,13 @@ Follow the directions according to the link as it pertains to your environment.
 
 ShapeNet v2 is also needed to re-render training data and to extract camera parameters for each
 model.
+
+#### Pre-traiend Model & Data
+
+Please refer to [IM-NET](https://github.com/czq142857/implicit-decoder.git) to download the pre-trained model, 
+training, and testing data. 
+
+You can download training data and re-render with the process described in 
 
 ```
 wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O [your/path/to/destination/dir]

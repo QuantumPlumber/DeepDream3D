@@ -65,6 +65,9 @@ class IM_SVR(base_model.BaseModel):
         # load the data
         # self.load_data(config)
 
+        self.data_loaded = False
+        self.checkpoint_loaded = False
+
         if torch.cuda.is_available():
             torch.backends.cudnn.benchmark = True
 
@@ -106,31 +109,35 @@ class IM_SVR(base_model.BaseModel):
             self.dataset_name, self.input_size)
 
     def load_data(self, config):
-        self.crop_edge = self.view_size - self.crop_size
-        data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
-        if os.path.exists(data_hdf5_name):
-            data_dict = h5py.File(data_hdf5_name, 'r')
-            offset_x = int(self.crop_edge / 2)
-            offset_y = int(self.crop_edge / 2)
-            # reshape to NCHW
-            self.data_pixels = np.reshape(
-                data_dict['pixels'][:, :, offset_y:offset_y + self.crop_size, offset_x:offset_x + self.crop_size],
-                [-1, self.view_num, 1, self.crop_size, self.crop_size])
-        else:
-            print("error: cannot load " + data_hdf5_name)
-            exit(0)
-        if config.train:
-            dataz_hdf5_name = self.checkpoint_dir + '/' + self.modelAE_dir + '/' + self.dataset_name + '_train_z.hdf5'
-            if os.path.exists(dataz_hdf5_name):
-                dataz_dict = h5py.File(dataz_hdf5_name, 'r')
-                self.data_zs = dataz_dict['zs'][:]
+        if not self.data_loaded:
+            self.crop_edge = self.view_size - self.crop_size
+            data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
+            if os.path.exists(data_hdf5_name):
+                data_dict = h5py.File(data_hdf5_name, 'r')
+                offset_x = int(self.crop_edge / 2)
+                offset_y = int(self.crop_edge / 2)
+                # reshape to NCHW
+                self.data_pixels = np.reshape(
+                    data_dict['pixels'][:, :, offset_y:offset_y + self.crop_size, offset_x:offset_x + self.crop_size],
+                    [-1, self.view_num, 1, self.crop_size, self.crop_size])
+
+                self.data_loaded = True
+
             else:
-                print("error: cannot load " + dataz_hdf5_name)
+                print("error: cannot load " + data_hdf5_name)
                 exit(0)
-            if len(self.data_zs) != len(self.data_pixels):
-                print("error: len(self.data_zs) != len(self.data_pixels)")
-                print(len(self.data_zs), len(self.data_pixels))
-                exit(0)
+            if config.train:
+                dataz_hdf5_name = self.checkpoint_dir + '/' + self.modelAE_dir + '/' + self.dataset_name + '_train_z.hdf5'
+                if os.path.exists(dataz_hdf5_name):
+                    dataz_dict = h5py.File(dataz_hdf5_name, 'r')
+                    self.data_zs = dataz_dict['zs'][:]
+                else:
+                    print("error: cannot load " + dataz_hdf5_name)
+                    exit(0)
+                if len(self.data_zs) != len(self.data_pixels):
+                    print("error: len(self.data_zs) != len(self.data_pixels)")
+                    print(len(self.data_zs), len(self.data_pixels))
+                    exit(0)
 
     def load_checkpoint(self):
         # load previous checkpoint
