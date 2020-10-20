@@ -9,7 +9,7 @@ aws ec2 create-volume \
     --size 150 \
     --availability-zone us-west-1c
 
-# attach volume to insance
+# attach volume to instance
 aws ec2 attach-volume --volume-id vol-1234567890abcdef0 --instance-id i-01474ef662b89480 --device /dev/sdf
 
 # interrogate filesystem

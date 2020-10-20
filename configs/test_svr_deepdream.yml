@@ -1,0 +1,100 @@
+
+# Configuration file for running deep dream experiments.
+#
+
+# --------------- specify model architecture-------------------------------
+# Choose one
+
+# True for ae [False]
+#ae: null
+
+# True for svr
+svr: null
+
+# --------------- specify model mode-------------------------------
+# Choose one, no choice produces default behavior of each model
+
+# True for training
+#train: null
+
+# True for getting latent codes
+#getz: null
+
+# True for interpolating latent codes
+#interpol: null
+
+# True for deepdream
+deepdream: null
+
+# --------------- training -------------------------------
+
+# Voxel resolution for coarse-to-fine training
+sample_vox_size: 64
+
+epoch: 0 # Epoch to train
+iteration: 0 # Iteration to train. Either epoch or iteration need to be zero
+
+# Adam Optimizer Settings
+learning_rate: 0.00005 # Learning rate for adam
+beta1: 0.5 # Momentum term of adam [0.5]
+
+
+# --------------- testing -------------------------------
+
+# "hdf5 file start and end index for testing [start:end]"
+start: 0
+end: 16
+
+# --------------- Data and Directories -------------------------------
+
+# The name of dataset
+R2N2_dir: "~/Insight/DeepDream3D/data/processed"
+
+# The name of dataset
+dataset: "all_vox256_img"
+
+# Directory where train and test splits are found:
+# *** Relative to project folder ***
+splitfile: "data/metadata/all_vox256_img_test.txt"
+
+# Directory name to save the checkpoints
+checkpoint_dir: "/home/ag/Insight/DeepDream3D/data/checkpoints/IM_SVR.model-1000.pth"
+
+# Root directory of dataset [data]
+data_dir: "/home/ag/Insight/DeepDream3D/data/processed"
+
+# Directory for image samples
+sample_dir: "/home/ag/Insight/DeepDream3D/data/processed"
+
+# Directory to store interpolation results
+interpol_directory: "/home/ag/Insight/DeepDream3D/data/processed"
+
+# --------------- Interpolation -------------------------------
+
+
+# First Interpolation latent vector
+interpol_z1: 300
+
+# image number
+z1_im_view: 23
+
+# Second Interpolation latent vector
+interpol_z2: 1600
+
+# image number
+z2_im_view: 23
+
+# number of steps to take between values
+interpol_steps: 5
+
+# --------------- deepdream -------------------------------
+
+# layer number to interpolate
+# layers are indexed from 1. Hook to collect derivative uses input of the following layer to capture nonlinear functions
+layer_num: 3
+
+# dream update rate
+dream_rate: 0.01
+
+# annealing rate, once every x steps
+annealing_rate: 1

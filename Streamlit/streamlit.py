@@ -90,12 +90,13 @@ def data_image(images):
                             ncols=4,
                             sharex='all',
                             sharey='all',
-                            figsize=(10, 10),
+                            figsize=(4 * 4, 6 * 4),
                             gridspec_kw={'wspace': 0, 'hspace': 0}
                             )
 
     for ax, im in zip(axs.flatten(), range(24)):
-        ax.imshow(images[im, :, :])
+        ax.set_title(im + 1)
+        ax.imshow(images[im, :, :], cmap='gray', vmin=0, vmax=255)
         ax.axis('off')
 
     return fig
@@ -175,8 +176,8 @@ def interpolate(FLAGS):
 
     print('processing images')
     num_images = int(images.shape[0])
-    rows = int(num_images ** .5)
-    cols = num_images // rows
+    cols = 2
+    rows = -(-num_images // cols)
 
     fig, axs = plt.subplots(nrows=rows,
                             ncols=cols,
@@ -212,11 +213,14 @@ def deepdream(FLAGS):
     verts = []
     faces = []
     verts_rgb = []
+    titles = []
     for file in files:
-        vert, face = load_ply(deep_dream_dir + '/' + file)
-        verts.append(vert.to(device))
-        faces.append(face.to(device))
-        verts_rgb.append(torch.ones_like(vert).to(device))
+        if file.split('.')[1] == 'ply':
+            titles.append(file.split('/')[-1])
+            vert, face = load_ply(os.path.join(deep_dream_dir, file))
+            verts.append(vert.to(device))
+            faces.append(face.to(device))
+            verts_rgb.append(torch.ones_like(vert).to(device))
 
     textures = Textures(verts_rgb=verts_rgb)
     interpol_mesh = Meshes(verts, faces, textures)
@@ -435,10 +439,10 @@ if __name__ == '__main__':
         renderer_instance = define_render(camera_num)
 
         # Create first and last starting shapes
-        st.text("Below are renderings of the shapes after being run through the encoder and IMNET decoder..")
-        diagnostic_flags = copy.deepcopy(user_FLAGS)
-        diagnostic_flags.interpol_steps = 2
-        st.pyplot(interpolate(FLAGS=diagnostic_flags))
+        #st.text("Below are renderings of the shapes after being run through the encoder and IMNET decoder..")
+        #diagnostic_flags = copy.deepcopy(user_FLAGS)
+        #diagnostic_flags.interpol_steps = 2
+        #st.pyplot(interpolate(FLAGS=diagnostic_flags))
 
         print(user_FLAGS)
 

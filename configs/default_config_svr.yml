@@ -82,7 +82,7 @@ z1_im_view: 23
 interpol_z2: 1600
 
 # image number
-z2_im_view: 23
+z2_im_view: 24
 
 # number of steps to take between values
 interpol_steps: 5

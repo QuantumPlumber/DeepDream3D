@@ -118,13 +118,16 @@ if __name__ == "__main__":
 
     indices = list(range(0, num_models, 100))
     print(indices)
-    #copy_hdf5(src_file=src_file, dest_file=dest_file, indices=indices)
+    copy_hdf5(src_file=src_file, dest_file=dest_file, indices=indices)
 
     indices = list(range(0, num_models, 100))
     print(indices)
     print('calling copy shapenet')
+
+    '''
     copy_shapenet_model(model_nums=indices,
                         dest_folder='data/raw',
                         R2N2_dir='/data/shapenet',
                         splitfile='data/metadata/all_vox256_img_test.txt',
                         views_rel_path="ShapeNetRendering")
+    '''

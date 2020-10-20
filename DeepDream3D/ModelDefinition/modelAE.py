@@ -52,6 +52,9 @@ class IM_AE(base_model.BaseModel):
 
         self.ef_dim = 32
 
+        self.data_loaded = False
+        self.checkpoint_loaded = False
+
         # load data
         # TODO: uncomment this
         self.load_data()
@@ -85,18 +88,19 @@ class IM_AE(base_model.BaseModel):
         return "{}_ae_{}".format(self.dataset_name, self.input_size)
 
     def load_data(self):
-        data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
-        if os.path.exists(data_hdf5_name):
-            data_dict = h5py.File(data_hdf5_name, 'r')
-            self.data_points = (data_dict['points_' + str(self.sample_vox_size)][:].astype(
-                np.float32) + 0.5) / 256 - 0.5
-            self.data_values = data_dict['values_' + str(self.sample_vox_size)][:].astype(np.float32)
-            self.data_voxels = data_dict['voxels'][:]
-            # reshape to NCHW
-            self.data_voxels = np.reshape(self.data_voxels, [-1, 1, self.input_size, self.input_size, self.input_size])
-        else:
-            print("error: cannot load " + data_hdf5_name)
-            exit(0)
+        if not self.data_loaded:
+            data_hdf5_name = self.data_dir + '/' + self.dataset_load + '.hdf5'
+            if os.path.exists(data_hdf5_name):
+                data_dict = h5py.File(data_hdf5_name, 'r')
+                self.data_points = (data_dict['points_' + str(self.sample_vox_size)][:].astype(
+                    np.float32) + 0.5) / 256 - 0.5
+                self.data_values = data_dict['values_' + str(self.sample_vox_size)][:].astype(np.float32)
+                self.data_voxels = data_dict['voxels'][:]
+                # reshape to NCHW
+                self.data_voxels = np.reshape(self.data_voxels, [-1, 1, self.input_size, self.input_size, self.input_size])
+            else:
+                print("error: cannot load " + data_hdf5_name)
+                exit(0)
 
     def load_checkpoint(self):
         # load previous checkpoint
