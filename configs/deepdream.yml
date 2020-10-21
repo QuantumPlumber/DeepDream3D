@@ -26,7 +26,6 @@ ae: null
 # True for deepdream
 deepdream: null
 
-
 # --------------- training -------------------------------
 
 # Voxel resolution for coarse-to-fine training
@@ -49,10 +48,17 @@ end: 16
 # --------------- Data and Directories -------------------------------
 
 # The name of dataset
+R2N2_dir: "/data/shapenet"
+
+# The name of dataset
 dataset: "all_vox256_img"
 
+# Directory where train and test splits are found:
+# *** Relative to project folder ***
+splitfile: "data/metadata/all_vox256_img_test.txt"
+
 # Directory name to save the checkpoints
-checkpoint_dir: "/data/IM-NET-pytorch/checkpoint"
+checkpoint_dir: "/data/IM-NET-pytorch/checkpoint/all_vox256_img_ae_64/IM_AE.model64-399.pth"
 
 # Root directory of dataset [data]
 data_dir: "/data/IM-NET-pytorch/data/all_vox256_img"
@@ -67,13 +73,19 @@ interpol_directory: '/data/IM-NET-pytorch/data/all_vox256_img'
 
 
 # First Interpolation latent vector
-interpol_z1: 1600
+interpol_z1: 300
+
+# image number
+z1_im_view: 23
 
 # Second Interpolation latent vector
-interpol_z2: 1500
+interpol_z2: 1600
+
+# image number
+z2_im_view: 23
 
 # number of steps to take between values
-interpol_steps: 10
+interpol_steps: 19
 
 # --------------- deepdream -------------------------------
 
@@ -82,4 +94,7 @@ interpol_steps: 10
 layer_num: 5
 
 # dream update rate
-dream_rate: .01
+dream_rate: .1
+
+# annealing rate, once every x steps
+annealing_rate: 1

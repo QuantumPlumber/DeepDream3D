@@ -81,30 +81,19 @@ wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O [yo
 
 
 ### Test
-- You can test the models by running the following commands:
+- You can test the deep dream models by running the following commands:
 ```
 # Test IM_AE: Navigate to the bash run script directory
 
-./test_ae.sh
+./test_ae_deepdream.sh
 ```
 ```
 # Test IM_AE: Navigate to the bash run script directory
 
-./test_svr.sh
+./test_svr_deepdream.sh
 ```
-
-```
-# Test IM_AE: Navigate to the bash run script directory
-
-./deepdream_test.sh
-```
-
-```
-# Test IM_AE: Navigate to the bash run script directory
-
-./deepdream_svr_test.sh
-```
-
+Original run scripts for training and testing and training can be found in the 
+original_run_scripts folder. Additionally, the code for processing 
 
 ### Run Inference
 - Include instructions on how to run inference
