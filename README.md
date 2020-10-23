@@ -13,23 +13,28 @@ working in the 3D modeling space: PyTorch3D. Their implementation of the standar
 dreaming loop. 
 
 ## Setup
-You can install the module using pip:
+Clone repository to your local computer. The base docker builds on top of the Amazon deep learning ECR
+repository:
+
 ```
-pip install DeepDream3D
+# for us-west-1 deep learning repos login after configuring AWS CLI
+sudo docker login --username AWS -p $(aws ecr get-login-password --region us-west-1) 763104351884.dkr.ecr.us-west-1.amazonaws.com
+
+# pull pytorch p36: 8GB
+sudo docker pull 763104351884.dkr.ecr.us-west-1.amazonaws.com/pytorch-training:1.6.0-gpu-py36-cu101-ubuntu16.04
+
 ```
 
-Or clone repository and update python path
+First build the Dockerfile_base and then the Dockerfile. Afterwards, assuming your hardware is compatible with 
+the AWS Linux ECR, you can run the streamlit app on port 8501 of localhost with:
+
 ```
-repo_name=Insight_Project_Framework # URL of your new repository
-username=mrubash1 # Username for your personal github account
-git clone https://github.com/$username/$repo_name
-cd $repo_name
-echo "export $repo_name=${PWD}" >> ~/.bash_profile
-echo "export PYTHONPATH=$repo_name/src:${PYTHONPATH}" >> ~/.bash_profile
-source ~/.bash_profile
+nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:1.2
 ```
 
-#### Dependencies
+** The Dockerfile assumes that the IM-NET pre-processed dataset has been donwloaded to /data **
+
+#### Dependencies for Non-Docker install
 
 The following notable packages are required to run successfully:
 
@@ -38,6 +43,7 @@ The following notable packages are required to run successfully:
 - [openCV](https://pypi.org/project/opencv-python/)
 
 To install these package and others, please run:
+
 ```shell
 pip install -r requiremnts
 ```
@@ -51,37 +57,21 @@ Follow the directions according to the link as it pertains to your environment.
 ShapeNet v2 is also needed to re-render training data and to extract camera parameters for each
 model.
 
-#### Pre-traiend Model & Data
+```
+wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O ~/data/ShapeNetCore.v1.zip
+```
 
-Please refer to [IM-NET](https://github.com/czq142857/implicit-decoder.git) to download the pre-trained model, 
+
+## Pre-traiend Model & Data
+
+- Please refer to [IM-NET](https://github.com/czq142857/implicit-decoder.git) to download the pre-trained model, 
 training, and testing data. 
 
-You can download training data and re-render with the process described in 
-
-```
-wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O [your/path/to/destination/dir]
-```
-
-## Build Environment
-- Include instructions of how to launch scripts in the build subfolder
-- Build scripts can include shell scripts or python setup.py files
-- The purpose of these scripts is to build a standalone environment, for running the code in this repository
-- The environment can be for local use, or for use in a cloud environment
-- If using for a cloud environment, commands could include CLI tools from a cloud provider (i.e. gsutil from Google Cloud Platform)
-```
-# Example
-
-# Step 1
-# Step 2
-```
 
 ## Running the code
 
-### Configs
-
-
-### Test
-- You can test the deep dream models by running the following commands:
+### Tests
+- You can test the deep dream models with included test datasets by running the following commands:
 ```
 # Test IM_AE: Navigate to the bash run script directory
 
@@ -92,45 +82,10 @@ wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O [yo
 
 ./test_svr_deepdream.sh
 ```
-Original run scripts for training and testing and training can be found in the 
-original_run_scripts folder. Additionally, the code for processing 
+Original run scripts for training and testing can be found in the 
+original_run_scripts folder. Additionally, the code for processing raw data has been included
+in the preprocessing folder.
 
-### Run Inference
-- Include instructions on how to run inference
-- i.e. image classification on a single image for a CNN deep learning project
-```
-# Example
-
-# Step 1
-# Step 2
-```
-
-### Build Model
-- Include instructions of how to build the model
-- This can be done either locally or on the cloud
-```
-# Example
-
-# Step 1
-# Step 2
-```
-
-### Serve Model
-- Include instructions of how to set up a REST or RPC endpoint
-- This is for running remote inference via a custom model
-```
-# Example
-
-# Step 1
-# Step 2
-```
 
 ### Analysis
-- Include some form of EDA (exploratory data analysis)
-- And/or include benchmarking of the model and results
-```
-# Example
-
-# Step 1
-# Step 2
-```
+Jupyter notebooks for interrogating the original datafiles can be found in the Jupyter_Notebooks folder.
