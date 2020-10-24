@@ -13,7 +13,17 @@ working in the 3D modeling space: PyTorch3D. Their implementation of the standar
 dreaming loop. 
 
 ## Setup
-Clone repository to your local computer. The base docker builds on top of the Amazon deep learning ECR
+A docker image with sample datasets is available on the docker hub:
+
+```
+docker pull theymightbegiants/deepdream3d:1.2
+```
+
+#### Docker Build
+
+To build a docker image on your own computer, follow the following steps:
+- Clone repository to your local computer. 
+- The base docker builds on top of the Amazon deep learning ECR
 repository:
 
 ```
@@ -25,14 +35,17 @@ sudo docker pull 763104351884.dkr.ecr.us-west-1.amazonaws.com/pytorch-training:1
 
 ```
 
-First build the Dockerfile_base and then the Dockerfile. Afterwards, assuming your hardware is compatible with 
+- First build the Dockerfile_base and then the Dockerfile.
+
+#### Docker run 
+- Afterwards, assuming your hardware is compatible with 
 the AWS Linux ECR, you can run the streamlit app on port 8501 of localhost with:
 
 ```
 nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:1.2
 ```
 
-** The Dockerfile assumes that the IM-NET pre-processed dataset has been donwloaded to /data **
+**The Dockerfile assumes that the IM-NET pre-processed dataset has been downloaded to directory /data**
 
 #### Dependencies for Non-Docker install
 
@@ -54,7 +67,7 @@ pip install -r requiremnts
 
 Follow the directions according to the link as it pertains to your environment.
 
-ShapeNet v2 is also needed to re-render training data and to extract camera parameters for each
+ShapeNet v1 is also needed to re-render training data and to extract camera parameters for each
 model.
 
 ```
