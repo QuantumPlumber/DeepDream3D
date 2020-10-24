@@ -158,9 +158,6 @@ class IM_AE_DD(IM_AE):
         # make sure gradients are set to zero to begin with on each pass.
         self.im_network.zero_grad()
 
-        # print(z_base.grad)
-        # create a numpy array to store accumulated derivatives
-        # accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -229,8 +226,7 @@ class IM_AE_DD(IM_AE):
             # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             style_activation = self.target_activation[0].clone().detach()
-            # style_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                     style_activation.size()[2]) > self.sampling_threshold
+
 
             style_points_mask = model_out_batch_.detach().expand(-1, -1, style_activation.size()[2])
             style_points_mask_above = style_points_mask > (1 - self.boundary) * self.sampling_threshold
@@ -240,56 +236,26 @@ class IM_AE_DD(IM_AE):
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
             base_activation = self.target_activation[0]
-            # base_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                    base_activation.size()[2]) > self.sampling_threshold
+
 
             base_points_mask = model_out_batch_.detach().expand(-1, -1, base_activation.size()[2])
             base_points_mask_above = base_points_mask > (1 - self.boundary) * self.sampling_threshold
             base_points_mask_below = base_points_mask > (1 + self.boundary) * self.sampling_threshold
             base_points_mask = torch.logical_and(base_points_mask_above, base_points_mask_below)
 
-            # Now compute the gradient
-            # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
-            # gradient = torch.from_numpy(gradient_).to(self.device)
 
-            # no need to track gradient for these operations
-            '''
-            with torch.no_grad():
-                diff = torch.abs(style_activation - base_activation)
-                mean = diff.mean()
-                print(mean)
-                shift_diff = diff - mean
-                sigma2 = torch.pow(shift_diff, 2).mean()
-                print(sigma2)
-                mantissa = torch.pow(shift_diff / sigma2, 2) # divide by total number of points
-                # print(mantissa)
-                loss = torch.exp(-mantissa)
-            '''
-
-            # loss = base_activation / torch.abs((style_activation - base_activation) + .001)
-            # loss = style_activation - base_activation
 
             difference = style_activation - base_activation
-            # loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
-            # loss = torch.sign(difference) / (torch.abs(difference) + .001)
+
             loss = difference.detach()
 
             # Union
             loss[torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))] = 0
 
-            # Intersection
-            # loss[torch.logical_or(torch.logical_not(style_points_mask), torch.logical_not(base_points_mask))] = 0
-
-            # loss[torch.logical_not(base_points_mask)] = 0
-            # print(loss)
-
             base_activation.backward(loss)
 
-            # print(z_base.grad)
 
             # Store gradient
-            # batch_grad = z_base.grad
-            # accumulated_grad += batch_grad.detach().cpu().numpy() / que_len
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
@@ -326,10 +292,6 @@ class IM_AE_DD(IM_AE):
         print('writing file: ' + self.result_dir + "/" + str(step) + "_vox.ply")
         write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
-        # update base sample points for next iteration.
-        # base_mesh = Meshes(verts=[vertices])
-        # self.base_sample_points = sample_points_from_meshes(meshes=base_mesh, num_samples=int(1e5))
-
         return z_base.grad
 
     def latent_style_transfer(self, z_style, z_target, alpha, step, plot, config):
@@ -344,12 +306,6 @@ class IM_AE_DD(IM_AE):
         :return:
         '''
 
-        # make sure gradients are set to zero to begin with on each pass.
-        # self.im_network.zero_grad()
-
-        # print(z_base.grad)
-        # create a numpy array to store accumulated derivatives
-        # accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -418,8 +374,6 @@ class IM_AE_DD(IM_AE):
             # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
             style_activation = self.target_activation[0].clone().detach()
-            # style_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                     style_activation.size()[2]) > self.sampling_threshold
 
             style_points_mask = model_out_batch_.detach().expand(-1, -1, style_activation.size()[2])
             style_points_mask_above = style_points_mask > (1 - self.boundary) * self.sampling_threshold
@@ -429,8 +383,6 @@ class IM_AE_DD(IM_AE):
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             transfer_activation = self.target_activation[0]
-            # base_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                    base_activation.size()[2]) > self.sampling_threshold
 
             mask = style_points_mask
 
@@ -440,15 +392,9 @@ class IM_AE_DD(IM_AE):
 
             loss = alpha * L2_style
 
-            # Intersection Mask
-            # loss[torch.logical_or(torch.logical_not(style_points_mask), torch.logical_not(base_points_mask))] = 0
-
-            # loss[torch.logical_not(base_points_mask)] = 0
-            # print(loss)
-
             loss.backward()
 
-            # print(z_base.grad)
+
 
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
@@ -586,22 +532,8 @@ class IM_AE_DD(IM_AE):
                                               step=step,
                                               plot=False,
                                               config=config)
-            # grad = self.latent_gradient(z1_vec, z2_vec, step, config)
-            # print(grad)
 
-            # Shift and scale
-            with torch.no_grad():
-                mean = grad.mean()
-                # print(mean)
-                shift_grad = grad - mean
-                sigma = torch.pow(torch.pow(shift_grad, 2).mean(), .5)
-                # sigma = torch.pow(shift_grad, 2).mean()
-                # print(sigma2)
-                mantissa = torch.pow(shift_grad, 2) / sigma  # divide by standard deviation
-                # print(mantissa)
-                # grad_step = torch.exp(-mantissa) * self.dream_rate
-                mantissa = shift_grad / sigma
-                grad_step = mantissa * self.dream_rate
+
 
             grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
 
