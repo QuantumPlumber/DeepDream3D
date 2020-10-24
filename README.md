@@ -38,7 +38,7 @@ sudo docker pull 763104351884.dkr.ecr.us-west-1.amazonaws.com/pytorch-training:1
 - First build the Dockerfile_base and then the Dockerfile.
 
 #### Docker run 
-- Afterwards, assuming your hardware is compatible with 
+Afterwards, assuming your hardware is compatible with 
 the AWS Linux ECR, you can run the streamlit app on port 8501 of localhost with:
 
 ```
@@ -47,7 +47,7 @@ nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:1.2
 
 **The Dockerfile assumes that the IM-NET pre-processed dataset has been downloaded to directory /data**
 
-#### Dependencies for Non-Docker install
+## Dependencies for Non-Docker install
 
 The following notable packages are required to run successfully:
 
@@ -81,17 +81,18 @@ wget http://shapenet.cs.stanford.edu/shapenet/obj-zip/ShapeNetCore.v1.zip -O ~/d
 training, and testing data. 
 
 
-## Running the code
 
-### Tests
-- You can test the deep dream models with included test datasets by running the following commands:
+
+## Tests
+You can test the deep dream models with included test datasets by running the docker container in interactive mode
+ and running the following commands:
 ```
 # Test IM_AE: Navigate to the bash run script directory
 
 ./test_ae_deepdream.sh
 ```
 ```
-# Test IM_AE: Navigate to the bash run script directory
+# Test IM_SVR: Navigate to the bash run script directory
 
 ./test_svr_deepdream.sh
 ```
