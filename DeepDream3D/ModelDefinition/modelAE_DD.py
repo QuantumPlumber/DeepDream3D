@@ -64,7 +64,7 @@ class IM_AE_DD(IM_AE):
         print('model_float shape')
         print(model_float.shape)
 
-        # This transform nescessary to accomodate coordinate transform induced in marching cubes
+        # This transform necessary to accommodate coordinate transform induced in marching cubes
         model_float = np.flip(np.transpose(model_float, (2, 1, 0)), 0)
 
         vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
@@ -287,9 +287,6 @@ class IM_AE_DD(IM_AE):
 
             # print(z_base.grad)
 
-            # Store gradient
-            # batch_grad = z_base.grad
-            # accumulated_grad += batch_grad.detach().cpu().numpy() / que_len
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
@@ -332,24 +329,31 @@ class IM_AE_DD(IM_AE):
 
         return z_base.grad
 
-    def latent_style_transfer(self, z_base, z_target, z_transfer, step, plot, config):
+    def latent_style_transfer(self,
+                              z_base: torch.Tensor,
+                              z_style: torch.Tensor,
+                              z_target: torch.Tensor,
+                              step: int,
+                              plot: bool,
+                              flag: bool,
+                              config):
         '''
-        Computes the average derivative of the loss L2_base + L2_target with z_transfer evaluated over the sample field.
+        Computes the gram correlation matrix of z_style and z_transfer
+        or
+        accumulates the style loss of the loss layer and the gram matrix.
 
-
-        :param self:
-        :param z_base:
-        :param z_target:
-        :param step:
+        :param z_base: base model latent vector
+        :param z_style: style model latent vector
+        :param z_transfer: transfer style model
+        :param step: iteration step
+        :param plot: whether to plot
+        :param flag: whether to compute the content (true) or style (false) error
+        :param config: configuration parameters
         :return:
         '''
 
-        # make sure gradients are set to zero to begin with on each pass.
-        # self.im_network.zero_grad()
-
-        # print(z_base.grad)
-        # create a numpy array to store accumulated derivatives
-        # accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
+        base_scale_update = 0
+        style_scale_update = 0
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -361,6 +365,11 @@ class IM_AE_DD(IM_AE):
         frame_batch_num = int(dimf ** 3 / self.test_point_batch_size)
         assert frame_batch_num > 0
 
+        if flag:
+            volume_z = z_base
+        else:
+            volume_z = z_style
+
         # get frame grid values: this gets frame voxels that contain above threshold values
         for i in range(frame_batch_num):
             point_coord = self.frame_coords[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
@@ -368,9 +377,9 @@ class IM_AE_DD(IM_AE):
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
 
-            # TODO: remove dummy data
-            _, model_out_ = self.im_network(None, z_transfer, point_coord, is_training=False)
+            _, model_out_ = self.im_network(None, volume_z, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
+            # TODO: remove dummy data
             # model_out = np.random.random(size=[1, 4096, 1])
 
             x_coords = self.frame_x[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
@@ -416,10 +425,12 @@ class IM_AE_DD(IM_AE):
             cell_coords = cell_coords.to(self.device)
 
             # Call the model on the target to get target encoder layer
-            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
             style_activation = self.target_activation[0].clone().detach()
-            # style_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                     style_activation.size()[2]) > self.sampling_threshold
+            style_gram_activation = self.gram_activation[0].clone().detach().squeeze()
+            # print(style_gram_activation.shape)
+            style_gram_matrix = torch.matmul(torch.transpose(style_gram_activation, 0, 1),
+                                             style_gram_activation).unsqueeze(0)
 
             style_points_mask = model_out_batch_.detach().expand(-1, -1, style_activation.size()[2])
             style_points_mask_above = style_points_mask > (1 - self.boundary) * self.sampling_threshold
@@ -429,8 +440,6 @@ class IM_AE_DD(IM_AE):
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
             base_activation = self.target_activation[0].clone().detach()
-            # base_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                    base_activation.size()[2]) > self.sampling_threshold
 
             base_points_mask = model_out_batch_.detach().expand(-1, -1, base_activation.size()[2])
             base_points_mask_above = base_points_mask > (1 - self.boundary) * self.sampling_threshold
@@ -438,19 +447,31 @@ class IM_AE_DD(IM_AE):
             base_points_mask = torch.logical_and(base_points_mask_above, base_points_mask_below)
 
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
-            _, model_out_batch_ = self.im_network(None, z_transfer, cell_coords, is_training=False)
-            transfer_activation = self.target_activation[0]
-            # base_points_mask = model_out_batch_.detach().expand(-1, -1,
-            #                                                    base_activation.size()[2]) > self.sampling_threshold
+            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            target_activation = self.target_activation[0]
+            target_gram_activation = self.gram_activation[0].squeeze()
+            target_gram_matrix = torch.matmul(torch.transpose(target_gram_activation, 0, 1),
+                                              target_gram_activation).unsqueeze(0)
 
             mask = torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))
 
             # Now compute the gradient
             mse_loss = torch.nn.MSELoss()
-            L2_base = mse_loss(transfer_activation, base_activation)
-            L2_style = mse_loss(transfer_activation, style_activation)
+            L2_base = mse_loss(target_activation, base_activation)
+            base_scale_update += L2_base.clone().detach().cpu().numpy()
+            # L2_base = self.style_scale * L2_base
+            # print('L2_base = {}'.format(L2_base))
+            L2_style = 1e-6 * mse_loss(target_gram_matrix, style_gram_matrix)
+            style_scale_update += L2_style.clone().detach().cpu().numpy()
+            # L2_style = self.base_scale * L2_style
+            # print('L2_style = {}'.format(L2_style))
 
-            loss = L2_base + L2_style
+            if flag:
+                loss = L2_base
+            else:
+                loss = L2_style
+
+            # loss = L2_base + L2_style
 
             # Intersection Mask
             # loss[torch.logical_or(torch.logical_not(style_points_mask), torch.logical_not(base_points_mask))] = 0
@@ -485,7 +506,7 @@ class IM_AE_DD(IM_AE):
                                     frame_flag[pi, pj, pk] = 1
                                     queue.append((pi, pj, pk))
 
-            print('iteration {} of {} completed'.format(iter_num, total_iter))
+            # print('iteration {} of {} completed'.format(iter_num, total_iter))
             iter_num += 1
 
         if plot:
@@ -499,8 +520,12 @@ class IM_AE_DD(IM_AE):
             print('writing file: ' + self.result_dir + "/" + str(step) + "_vox.ply")
             write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
+        # update dynamic scaleing
+        self.base_scale = base_scale_update
+        self.style_scale = style_scale_update
+
         # return accumulated gradient of z_transfer
-        return z_transfer.grad
+        return z_target.grad.clone().detach()
 
     def deep_dream(self, config):
         '''
@@ -520,6 +545,10 @@ class IM_AE_DD(IM_AE):
         self.dream_rate = config.dream_rate
         self.boundary = .1
 
+        # setup style scaling
+        self.base_scale = 1
+        self.style_scale = 1
+
         # Set up forward hook to pull values
         self.layer_num = config.layer_num
         # list index includes as zero entry the generator module itself. (layer indices start from 1)
@@ -531,8 +560,12 @@ class IM_AE_DD(IM_AE):
         # this is the way to get the actual model variable
         self.target_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
         self.target_activation = [None]
-
         self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
+
+        # choose the first layer as the style layer to produce the gram matrices
+        self.gram_layer = list(self.im_network.generator.named_modules())[1][1]
+        self.gram_activation = [None]
+        self.gram_layer.register_forward_hook(self.get_activation(self.gram_activation))
 
         # get config values
         z1 = int(config.interpol_z1)
@@ -556,9 +589,17 @@ class IM_AE_DD(IM_AE):
         # z1_vec_copy = z1_vec_.clone()
         # z1_vec_ = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
         z1_base = z1_vec_.detach().clone()
+        # z1_vec = torch.rand(256, requires_grad=True, device=self.device)
         z1_vec = torch.autograd.Variable(z1_vec_, requires_grad=True)
 
         self.create_model_mesh(z1_base, 'base_model')
+        dummy_threshold = self.sampling_threshold
+        '''
+        for i, threshold in enumerate(np.linspace(.1, 1, num=5)):
+            self.sampling_threshold = threshold
+            self.create_model_mesh(z1_base, 'base_model_sample_{}'.format(i))
+        self.sampling_threshold = threshold
+        '''
 
         # TODO: comment out dummy data
         z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
@@ -585,39 +626,53 @@ class IM_AE_DD(IM_AE):
         for step in range(interpol_steps):
             start_time = time.perf_counter()
 
+            if step < 2:
+                # keep the style scaling at 1 for the first few iterations.
+                self.base_scale = 1
+                self.style_scale = 1
+
             # accumulate the gradient
 
             # zero out the gradient on each step
             self.im_network.zero_grad()
 
-            # compute gradient with z2_base
-            grad = self.latent_style_transfer(z_base=z2_vec,
-                                              z_target=z1_base,
-                                              z_transfer=z1_vec,
-                                              step=step,
-                                              plot=False,
-                                              config=config)
+            # compute content loss and back prop
+            content_loss = self.latent_style_transfer(z_base=z1_base,
+                                                      z_style=z2_vec,
+                                                      z_target=z1_vec,
+                                                      step=step,
+                                                      plot=False,
+                                                      flag=True,
+                                                      config=config)
+
+            # zero out the gradient on each step
+            self.im_network.zero_grad()
+
+            # compute content loss and backprop
+            style_loss = self.latent_style_transfer(z_base=z1_base,
+                                                    z_style=z2_vec,
+                                                    z_target=z1_vec,
+                                                    step=step,
+                                                    plot=False,
+                                                    flag=False,
+                                                    config=config)
+
             # grad = self.latent_gradient(z1_vec, z2_vec, step, config)
             # print(grad)
 
-            # Shift and scale
+            # to ensure the graph does not keep a gradient record, use no_grad
             with torch.no_grad():
-                mean = grad.mean()
-                # print(mean)
-                shift_grad = grad - mean
-                sigma = torch.pow(torch.pow(shift_grad, 2).mean(), .5)
-                # sigma = torch.pow(shift_grad, 2).mean()
-                # print(sigma2)
-                mantissa = torch.pow(shift_grad, 2) / sigma  # divide by standard deviation
-                # print(mantissa)
-                # grad_step = torch.exp(-mantissa) * self.dream_rate
-                mantissa = shift_grad / sigma
-                grad_step = mantissa * self.dream_rate
+                # print(content_loss / (content_loss.norm() + 1e-5))
+                # print(style_loss / (style_loss.norm() + 1e-5))
 
-            grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
+                grad = (10 * content_loss / (content_loss.norm() + 1e-5) + style_loss / (style_loss.norm() + 1e-5)) / 2
+                grad_step = grad * self.dream_rate
 
-            print(grad_step)
-            z1_vec.data -= grad_step
+                # grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
+
+                print(grad_step)
+                z1_vec.data -= grad_step
+                z1_vec.data = torch.clamp(z1_vec.data, 0, 1)
 
             self.create_model_mesh(z1_vec, str(step))
 

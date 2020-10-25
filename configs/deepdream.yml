@@ -85,7 +85,7 @@ interpol_z2: 1600
 z2_im_view: 23
 
 # number of steps to take between values
-interpol_steps: 19
+interpol_steps: 50
 
 # --------------- deepdream -------------------------------
 
