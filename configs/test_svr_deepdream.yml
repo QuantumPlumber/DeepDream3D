@@ -48,7 +48,7 @@ end: 16
 # --------------- Data and Directories -------------------------------
 
 # The name of dataset
-R2N2_dir: "~/Insight/DeepDream3D/data/processed"
+R2N2_dir: "/usr/DeepDream3D/data/processed"
 
 # The name of dataset
 dataset: "all_vox256_img"
@@ -58,16 +58,16 @@ dataset: "all_vox256_img"
 splitfile: "data/metadata/all_vox256_img_test.txt"
 
 # Directory name to save the checkpoints
-checkpoint_dir: "/home/ag/Insight/DeepDream3D/data/checkpoints/IM_SVR.model-1000.pth"
+checkpoint_dir: "/usr/DeepDream3D/Insight/DeepDream3D/data/checkpoints/IM_AE.model64-399.pth"
 
 # Root directory of dataset [data]
-data_dir: "/home/ag/Insight/DeepDream3D/data/processed"
+data_dir: "/usr/DeepDream3D/Insight/DeepDream3D/data/processed"
 
 # Directory for image samples
-sample_dir: "/home/ag/Insight/DeepDream3D/data/processed"
+sample_dir: "/usr/DeepDream3D/Insight/DeepDream3D/data/processed"
 
 # Directory to store interpolation results
-interpol_directory: "/home/ag/Insight/DeepDream3D/data/processed"
+interpol_directory: "/usr/DeepDream3D/Insight/DeepDream3D/data/processed"
 
 # --------------- Interpolation -------------------------------
 

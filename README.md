@@ -16,7 +16,7 @@ dreaming loop.
 A docker image with sample datasets is available on the docker hub:
 
 ```
-docker pull theymightbegiants/deepdream3d:1.2
+docker pull theymightbegiants/deepdream3d:1.3
 ```
 
 #### Docker Build
@@ -42,7 +42,7 @@ Afterwards, assuming your hardware is compatible with
 the AWS Linux ECR, you can run the streamlit app on port 8501 of localhost with:
 
 ```
-nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:1.2
+nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:1.3
 ```
 
 **The Dockerfile assumes that the IM-NET pre-processed dataset has been downloaded to directory /data**
@@ -84,20 +84,26 @@ training, and testing data.
 
 
 ## Tests
-You can test the deep dream models with included test datasets by running the docker container in interactive mode
- and running the following commands:
+You can test the deep dream models with included test datasets by running the docker container in interactive mode:
+```
+nvidia-docker run -it --entrypoint /bin/bash deep-dream-3d:1.3
+```
+
+Run the following commands:
+
 ```
 # Test IM_AE: Navigate to the bash run script directory
-
+cd bash_run_scripts
 ./test_ae_deepdream.sh
 ```
+
 ```
 # Test IM_SVR: Navigate to the bash run script directory
-
+cd bash_run_scripts
 ./test_svr_deepdream.sh
 ```
-Original run scripts for training and testing can be found in the 
-original_run_scripts folder. Additionally, the code for processing raw data has been included
+Original run scripts for training and testing can be found in the original_run_scripts folder. 
+Additionally, the code for processing raw data has been included
 in the preprocessing folder.
 
 
