@@ -365,10 +365,13 @@ class IM_AE_DD(IM_AE):
         frame_batch_num = int(dimf ** 3 / self.test_point_batch_size)
         assert frame_batch_num > 0
 
-        if flag:
-            volume_z = z_base
-        else:
-            volume_z = z_style
+        # determine volume to optimize over
+        #if flag:
+        #    volume_z = z_base
+        #else:
+        #    volume_z = z_style
+
+        volume_z = z_target
 
         # get frame grid values: this gets frame voxels that contain above threshold values
         for i in range(frame_batch_num):
@@ -633,10 +636,12 @@ class IM_AE_DD(IM_AE):
 
             # accumulate the gradient
 
+            '''
             # zero out the gradient on each step
             self.im_network.zero_grad()
 
-            # compute content loss and back prop
+            # compute content loss via back prop
+
             content_loss = self.latent_style_transfer(z_base=z1_base,
                                                       z_style=z2_vec,
                                                       z_target=z1_vec,
@@ -644,11 +649,12 @@ class IM_AE_DD(IM_AE):
                                                       plot=False,
                                                       flag=True,
                                                       config=config)
+            '''
 
             # zero out the gradient on each step
             self.im_network.zero_grad()
 
-            # compute content loss and backprop
+            # compute style loss via backprop
             style_loss = self.latent_style_transfer(z_base=z1_base,
                                                     z_style=z2_vec,
                                                     z_target=z1_vec,
@@ -665,8 +671,9 @@ class IM_AE_DD(IM_AE):
                 # print(content_loss / (content_loss.norm() + 1e-5))
                 # print(style_loss / (style_loss.norm() + 1e-5))
 
-                grad = (10 * content_loss / (content_loss.norm() + 1e-5) + style_loss / (style_loss.norm() + 1e-5)) / 2
-                grad_step = grad * self.dream_rate
+                #grad = (content_loss / (content_loss.norm() + 1e-5) + style_loss / (style_loss.norm() + 1e-5)) / 2
+
+                grad_step = style_loss * self.dream_rate
 
                 # grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
 

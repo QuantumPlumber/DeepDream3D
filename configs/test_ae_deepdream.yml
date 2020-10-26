@@ -58,28 +58,28 @@ dataset: "all_vox256_img"
 splitfile: "data/metadata/all_vox256_img_test.txt"
 
 # Directory name to save the checkpoints
-checkpoint_dir: "/home/ag/Insight/DeepDream3D/data/checkpoints/IM_AE.model64-399.pth"
+checkpoint_dir: "/home/ubuntu/Insight/DeepDream3D/data/checkpoints/IM_AE.model64-399.pth"
 
 # Root directory of dataset [data]
-data_dir: "/home/ag/Insight/DeepDream3D/data/processed"
+data_dir: "/home/ubuntu/Insight/DeepDream3D/data/processed"
 
 # Directory for image samples
-sample_dir: "/home/ag/Insight/DeepDream3D/data/processed"
+sample_dir: "/home/ubuntu/Insight/DeepDream3D/data/processed"
 
 # Directory to store interpolation results
-interpol_directory: "/home/ag/Insight/DeepDream3D/data/processed"
+interpol_directory: "/home/ubuntu/Insight/DeepDream3D/data/processed"
 
 # --------------- Interpolation -------------------------------
 
 
 # First Interpolation latent vector
-interpol_z1: 300
+interpol_z1: 2
 
 # image number
 z1_im_view: 23
 
 # Second Interpolation latent vector
-interpol_z2: 1600
+interpol_z2: 3
 
 # image number
 z2_im_view: 23
