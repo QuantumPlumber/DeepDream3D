@@ -85,7 +85,7 @@ interpol_z2: 1600
 z2_im_view: 23
 
 # number of steps to take between values
-interpol_steps: 50
+interpol_steps: 15
 
 # --------------- deepdream -------------------------------
 
@@ -94,7 +94,7 @@ interpol_steps: 50
 layer_num: 5
 
 # dream update rate
-dream_rate: .1
+dream_rate: .0
 
 # annealing rate, once every x steps
 annealing_rate: 1
