@@ -33,7 +33,7 @@ To run with the limited training data provided in the docker image, run the imag
 nvidia-docker run -it --rm -p 8501:8501 deepdream3d:2.0
 ```
 
-and navigate to https://localhost:8888 to interact with the streamlit app.
+and navigate to https://localhost:8501 to interact with the streamlit app.
 
 #### Docker Build
 
@@ -102,7 +102,7 @@ training, and testing data.
 ## Tests
 You can test the deep dream models with included test datasets by running the docker container in interactive mode:
 ```
-nvidia-docker run -it --entrypoint /bin/bash deep-dream-3d:1.3
+nvidia-docker run -it --entrypoint /bin/bash deep-dream-3d:2.0
 ```
 
 Run the following commands:
