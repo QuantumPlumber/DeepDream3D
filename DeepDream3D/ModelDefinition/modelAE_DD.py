@@ -514,12 +514,9 @@ class IM_AE_DD(IM_AE):
         :return:
         '''
 
-        base_scale_update = 0
-        style_scale_update = 0
-
         # scaling variables for style (alpha) and activation (beta) loss.
         alpha = 1.0
-        beta = 1e-7
+        beta = config.beta
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -531,14 +528,6 @@ class IM_AE_DD(IM_AE):
         frame_batch_num = int(dimf ** 3 / self.test_point_batch_size)
         assert frame_batch_num > 0
 
-        # determine volume to optimize over
-        # if flag:
-        #    volume_z = z_base
-        # else:
-        #    volume_z = z_style
-
-        volume_z = z_target
-
         # get frame grid values: this gets frame voxels that contain above threshold values
         for i in range(frame_batch_num):
             point_coord = self.frame_coords[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
@@ -546,7 +535,7 @@ class IM_AE_DD(IM_AE):
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
 
-            _, model_out_ = self.im_network(None, volume_z, point_coord, is_training=False)
+            _, model_out_ = self.im_network(None, z_target, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
             # TODO: remove dummy data
             # model_out = np.random.random(size=[1, 4096, 1])
@@ -595,47 +584,27 @@ class IM_AE_DD(IM_AE):
             cell_coords = torch.from_numpy(cell_coords)
             cell_coords = cell_coords.to(self.device)
 
-            # Call the model on the target to get target encoder layer
-            '''
-            _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
-            style_activation = self.target_activation[0].clone().detach()
-            style_gram_activation = self.gram_activation[0].clone().detach().squeeze()
-            # print(style_gram_activation.shape)
-            style_gram_matrix = torch.matmul(torch.transpose(style_gram_activation, 0, 1),
-                                             style_gram_activation).unsqueeze(0)
-            '''
-
             # Call the model on the base to get base encoder layer
             _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
             base_activation = self.target_activation[0].clone().detach()
 
-            # Call the model on the base to get base encoder layer, first set z_base to is_training = true
+            # Call the model on the base to get base encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             target_activation = self.target_activation[0]
-            target_gram_activation = self.gram_activation[0]
-            # print(target_gram_activation.shape)
 
             # Now compute the gradient
             mse_loss = torch.nn.MSELoss()
             L2_base = alpha * mse_loss(target_activation, base_activation)
             L2_base.backward(retain_graph=False)
 
-            print('after L1 back, z_target grad:')
-            print(z_target.grad.norm())
-
-            # Call the model on the base to get base encoder layer, first set z_base to is_training = true
+            # Call the model on the target to get base target layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
-            target_activation = self.target_activation[0]
             target_gram_activation = self.gram_activation[0]
-            # print(target_gram_activation.shape)
+
 
             L2_style = target_gram_activation
             L2_style.backward(beta * gram_loss[points_num:(points_num + num_points), :].unsqueeze(0),
                               retain_graph=False)
-
-            print('after L2 back, z_target grad:')
-            print(z_target.grad.norm())
-            # print(z_base.grad)
 
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
@@ -746,13 +715,6 @@ class IM_AE_DD(IM_AE):
         z1_vec = torch.autograd.Variable(z1_vec_, requires_grad=True)
 
         self.create_model_mesh(z1_base, 'base_model')
-        '''
-        dummy_threshold = self.sampling_threshold
-        for i, threshold in enumerate(np.linspace(.1, 1, num=5)):
-            self.sampling_threshold = threshold
-            self.create_model_mesh(z1_base, 'base_model_sample_{}'.format(i))
-        self.sampling_threshold = threshold
-        '''
 
         # TODO: comment out dummy data
         z2_vec = torch.from_numpy(self.get_zvec(z2)).to(self.device)
@@ -760,21 +722,6 @@ class IM_AE_DD(IM_AE):
 
         self.create_model_mesh(z2_vec, 'style_model')
 
-        # Generate base model vertices.
-        '''
-        model_float = self.z2voxel(z1_vec_)
-        vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
-        vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
-        base_mesh = Meshes(verts=[vertices])
-        self.base_sample_points = sample_points_from_meshes(meshes=base_mesh, num_samples=int(1e5))
-
-        # Generate target model vertices.
-        model_float = self.z2voxel(z2_vec)
-        vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
-        vertices = (vertices.astype(np.float32) - 0.5) / self.real_size - 0.5
-        target_mesh = Meshes(verts=[vertices])
-        self.target_sample_points = sample_points_from_meshes(meshes=target_mesh, num_samples=int(1e5))
-        '''
 
         for step in range(interpol_steps):
             start_time = time.perf_counter()
@@ -816,19 +763,11 @@ class IM_AE_DD(IM_AE):
                                                     flag=False,
                                                     config=config)
 
-            # grad = self.latent_gradient(z1_vec, z2_vec, step, config)
-            # print(grad)
+
 
             # to ensure the graph does not keep a gradient record, use no_grad
             with torch.no_grad():
-                # print(content_loss / (content_loss.norm() + 1e-5))
-                # print(style_loss / (style_loss.norm() + 1e-5))
-
-                # grad = (content_loss / (content_loss.norm() + 1e-5) + style_loss / (style_loss.norm() + 1e-5)) / 2
-
                 grad_step = style_loss / style_loss.norm() * self.dream_rate
-
-                # grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
 
                 print(grad_step)
                 z1_vec.data -= grad_step

@@ -84,6 +84,8 @@ def get_parser():
 						help="activation layer to maximize")
 	parser.add_argument("--dream_rate", action="store", dest="dream_rate", default=.01, type=float,
 						help="dream update rate")
+	parser.add_argument("--beta", action="store", dest="beta", default=1e-7, type=float,
+						help="style loss factor (gram matrix)")
 	parser.add_argument("--annealing_rate", action="store", dest="annealing_rate", default=1, type=int,
 						help="annealing rate")
 

@@ -73,13 +73,13 @@ interpol_directory: "/home/ag/Insight/DeepDream3D/data/processed"
 
 
 # First Interpolation latent vector
-interpol_z1: 300
+interpol_z1: 2
 
 # image number
 z1_im_view: 23
 
 # Second Interpolation latent vector
-interpol_z2: 1600
+interpol_z2: 3
 
 # image number
 z2_im_view: 23
@@ -93,8 +93,8 @@ interpol_steps: 5
 # layers are indexed from 1. Hook to collect derivative uses input of the following layer to capture nonlinear functions
 layer_num: 3
 
-# dream update rate
-dream_rate: 0.01
+# style loss scaling factor
+beta: 1e-7
 
 # annealing rate, once every x steps
 annealing_rate: 1
