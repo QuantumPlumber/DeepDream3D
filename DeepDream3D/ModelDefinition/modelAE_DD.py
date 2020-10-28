@@ -460,13 +460,13 @@ class IM_AE_DD(IM_AE):
             iter_num += 1
 
         # Now compute the global gram correlation matrix
-        style_gram_record_ = torch.cat(style_gram_record, dim=0)
-        del style_gram_record
-        style_gram_record = style_gram_record_
+        style_gram_record = torch.cat(style_gram_record, dim=0)
+        #del style_gram_record
+        #style_gram_record = style_gram_record_
         print(style_gram_record.shape)
-        target_gram_record_ = torch.cat(target_gram_record, dim=0)
-        del target_gram_record
-        target_gram_record = target_gram_record_
+        target_gram_record = torch.cat(target_gram_record, dim=0)
+        # del target_gram_record
+        # target_gram_record = target_gram_record_
         target_gram_record.requires_grad_()
         target_gram_matrix = torch.matmul(torch.transpose(target_gram_record, 0, 1), target_gram_record)
         style_gram_matrix = torch.matmul(torch.transpose(style_gram_record, 0, 1), style_gram_record)
@@ -483,8 +483,12 @@ class IM_AE_DD(IM_AE):
 
         # clean up memory explicitely
         # del loss, target_gram_matrix, style_gram_matrix, target_gram_record, style_gram_record
-        print(target_gram_record.grad)
-        return target_gram_record.grad.detach().clone()
+        print('gram_record grad:')
+        print(target_gram_record.grad.norm())
+        gram_out = target_gram_record.grad.detach().clone()
+        # gram_out = gram_out / gram_out.norm()
+        # print(gram_out)
+        return gram_out
 
     def latent_style_transfer(self,
                               z_base: torch.Tensor,
@@ -512,6 +516,10 @@ class IM_AE_DD(IM_AE):
 
         base_scale_update = 0
         style_scale_update = 0
+
+        # scaling variables for style (alpha) and activation (beta) loss.
+        alpha = 1.0
+        beta = 1e-7
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -609,13 +617,24 @@ class IM_AE_DD(IM_AE):
 
             # Now compute the gradient
             mse_loss = torch.nn.MSELoss()
-            L2_base = mse_loss(target_activation, base_activation)
-            L2_base.backward(retain_graph=True)
+            L2_base = alpha * mse_loss(target_activation, base_activation)
+            L2_base.backward(retain_graph=False)
+
+            print('after L1 back, z_target grad:')
+            print(z_target.grad.norm())
+
+            # Call the model on the base to get base encoder layer, first set z_base to is_training = true
+            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            target_activation = self.target_activation[0]
+            target_gram_activation = self.gram_activation[0]
+            # print(target_gram_activation.shape)
 
             L2_style = target_gram_activation
-            L2_style.backward(gram_loss[points_num:(points_num + num_points), :].unsqueeze(0),
+            L2_style.backward(beta * gram_loss[points_num:(points_num + num_points), :].unsqueeze(0),
                               retain_graph=False)
 
+            print('after L2 back, z_target grad:')
+            print(z_target.grad.norm())
             # print(z_base.grad)
 
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
@@ -696,7 +715,7 @@ class IM_AE_DD(IM_AE):
         self.target_gram_loss = None
 
         # choose the first layer as the style layer to produce the gram matrices
-        self.gram_layer = list(self.im_network.generator.named_modules())[1][1]
+        self.gram_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
         self.gram_activation = [None]
         self.gram_layer.register_forward_hook(self.get_activation(self.gram_activation))
         target_gram_grad = None
@@ -769,12 +788,16 @@ class IM_AE_DD(IM_AE):
 
             # zero out the gradient on each step
             self.im_network.zero_grad()
+            if isinstance(z1_vec.grad, torch.Tensor):
+                print('reset leaf gradient to zero.')
+                z1_vec.grad.zero_()
 
             # compute non-local style loss
 
             # must delete large style vector between runs, otherwise memory leak
             if target_gram_grad is not None:
                 del target_gram_grad
+                torch.cuda.empty_cache() # must completely free memory from torch to avoid segmentation problems
 
             target_gram_grad = self.build_gram_matrix(z_style=z2_vec,
                                                       z_target=z1_vec,
@@ -803,7 +826,7 @@ class IM_AE_DD(IM_AE):
 
                 # grad = (content_loss / (content_loss.norm() + 1e-5) + style_loss / (style_loss.norm() + 1e-5)) / 2
 
-                grad_step = style_loss * self.dream_rate
+                grad_step = style_loss / style_loss.norm() * self.dream_rate
 
                 # grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
 

@@ -79,7 +79,7 @@ interpol_z1: 300
 z1_im_view: 23
 
 # Second Interpolation latent vector
-interpol_z2: 1600
+interpol_z2: 3113
 
 # image number
 z2_im_view: 23
@@ -94,7 +94,7 @@ interpol_steps: 15
 layer_num: 5
 
 # dream update rate
-dream_rate: .0
+dream_rate: .1
 
 # annealing rate, once every x steps
 annealing_rate: 1
