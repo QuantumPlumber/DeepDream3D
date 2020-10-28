@@ -370,14 +370,8 @@ class IM_AE_DD(IM_AE):
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
 
-            _, model_out_ = self.im_network(None, z_style, point_coord, is_training=False)
+            _, model_out_ = self.im_network(None, volume_z, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
-
-            _, model_out_ = self.im_network(None, z_target, point_coord, is_training=False)
-            model_out_ = model_out_.detach().cpu().numpy()[0]
-            # take the union of the two models.
-            model_out[model_out_ > self.sampling_threshold] = model_out_[model_out_ > self.sampling_threshold]
-
             # TODO: remove dummy data
             # model_out = np.random.random(size=[1, 4096, 1])
 
@@ -424,9 +418,8 @@ class IM_AE_DD(IM_AE):
             cell_coords = torch.from_numpy(cell_coords)
             cell_coords = cell_coords.to(self.device)
 
-            # Call the model on the style to get style encoder layer
+            # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
-            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             style_gram_activation = self.gram_activation[0].clone().detach().squeeze()
 
             style_gram_record.append(style_gram_activation)
@@ -434,14 +427,11 @@ class IM_AE_DD(IM_AE):
 
             # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
-            model_out_batch_ = model_out_batch_.detach().cpu().numpy()[0]
-            #take the union of the two models.
-            model_out_batch[model_out_batch_ > self.sampling_threshold] = model_out_batch_[
-                model_out_batch_ > self.sampling_threshold]
             target_gram_activation = self.gram_activation[0].clone().detach().squeeze()
 
             target_gram_record.append(target_gram_activation)
 
+            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
                 model_out = model_out_batch[i * cell_batch_size:(i + 1) * cell_batch_size, 0]
@@ -471,8 +461,8 @@ class IM_AE_DD(IM_AE):
 
         # Now compute the global gram correlation matrix
         style_gram_record = torch.cat(style_gram_record, dim=0)
-        # del style_gram_record
-        # style_gram_record = style_gram_record_
+        #del style_gram_record
+        #style_gram_record = style_gram_record_
         print(style_gram_record.shape)
         target_gram_record = torch.cat(target_gram_record, dim=0)
         # del target_gram_record
@@ -529,7 +519,7 @@ class IM_AE_DD(IM_AE):
 
         # scaling variables for style (alpha) and activation (beta) loss.
         alpha = 1.0
-        beta = config.beta
+        beta = 1e-7
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -556,14 +546,8 @@ class IM_AE_DD(IM_AE):
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
 
-            _, model_out_ = self.im_network(None, z_style, point_coord, is_training=False)
+            _, model_out_ = self.im_network(None, volume_z, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
-
-            _, model_out_ = self.im_network(None, z_target, point_coord, is_training=False)
-            model_out_ = model_out_.detach().cpu().numpy()[0]
-            # take the union of the two models.
-            model_out[model_out_ > self.sampling_threshold] = model_out_[model_out_ > self.sampling_threshold]
-
             # TODO: remove dummy data
             # model_out = np.random.random(size=[1, 4096, 1])
 
@@ -628,6 +612,7 @@ class IM_AE_DD(IM_AE):
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             target_activation = self.target_activation[0]
+            target_gram_activation = self.gram_activation[0]
             # print(target_gram_activation.shape)
 
             # Now compute the gradient
@@ -638,17 +623,11 @@ class IM_AE_DD(IM_AE):
             print('after L1 back, z_target grad:')
             print(z_target.grad.norm())
 
-            # Call the model on the style to get style encoder layer, required for que values
-            _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
-            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
-
-            # Call the model on the target
+            # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            target_activation = self.target_activation[0]
             target_gram_activation = self.gram_activation[0]
-            model_out_batch_ = model_out_batch_.detach().cpu().numpy()[0]
-            #take the union of the two models.
-            model_out_batch[model_out_batch_ > self.sampling_threshold] = model_out_batch_[
-                model_out_batch_ > self.sampling_threshold]
+            # print(target_gram_activation.shape)
 
             L2_style = target_gram_activation
             L2_style.backward(beta * gram_loss[points_num:(points_num + num_points), :].unsqueeze(0),
@@ -658,6 +637,7 @@ class IM_AE_DD(IM_AE):
             print(z_target.grad.norm())
             # print(z_base.grad)
 
+            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
                 model_out = model_out_batch[i * cell_batch_size:(i + 1) * cell_batch_size, 0]
@@ -735,7 +715,7 @@ class IM_AE_DD(IM_AE):
         self.target_gram_loss = None
 
         # choose the first layer as the style layer to produce the gram matrices
-        self.gram_layer = list(self.im_network.generator.named_modules())[1][1]
+        self.gram_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
         self.gram_activation = [None]
         self.gram_layer.register_forward_hook(self.get_activation(self.gram_activation))
         target_gram_grad = None
@@ -817,7 +797,7 @@ class IM_AE_DD(IM_AE):
             # must delete large style vector between runs, otherwise memory leak
             if target_gram_grad is not None:
                 del target_gram_grad
-                torch.cuda.empty_cache()  # must completely free memory from torch to avoid segmentation problems
+                torch.cuda.empty_cache() # must completely free memory from torch to avoid segmentation problems
 
             target_gram_grad = self.build_gram_matrix(z_style=z2_vec,
                                                       z_target=z1_vec,

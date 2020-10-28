@@ -73,13 +73,13 @@ interpol_directory: "/home/ag/Insight/DeepDream3D/data/processed"
 
 
 # First Interpolation latent vector
-interpol_z1: 2
+interpol_z1: 300
 
 # image number
 z1_im_view: 23
 
 # Second Interpolation latent vector
-interpol_z2: 3
+interpol_z2: 1600
 
 # image number
 z2_im_view: 23
@@ -95,9 +95,6 @@ layer_num: 3
 
 # dream update rate
 dream_rate: 0.01
-
-# style loss scaling
-beta: 1e-9
 
 # annealing rate, once every x steps
 annealing_rate: 1
