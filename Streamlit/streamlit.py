@@ -284,7 +284,7 @@ if __name__ == '__main__':
         key='reset'
     )
     if reset_model_flag:
-        nominal_YAML = '../configs/default_config_ae.yml'
+        nominal_YAML = '../configs/test_ae_deepdream.yml'
         nominal_FLAGS = read_config(nominal_YAML)
 
     st.sidebar.text(
@@ -337,7 +337,6 @@ if __name__ == '__main__':
 
     st.sidebar.text('Model Type:')
 
-
     for action, [flag, param] in enumerate(user_flags_dict.items()):
         if flag in param_to_expose:
             if type(param) is bool:
@@ -364,19 +363,29 @@ if __name__ == '__main__':
                         key=flag
                     )
             if type(param) is float:
-                user_flags_dict[flag] = st.sidebar.number_input(
-                    label=parser._actions[action + 1].help,
-                    value=param,
-                    step=.001,
-                    key=flag
-                )
+
+                if flag is 'beta':
+                    user_flags_dict[flag] = st.sidebar.number_input(
+                        label=parser._actions[action + 1].help,
+                        value=param,
+                        step=.00000001,
+                        key=flag,
+                        format="%.2e"
+                    )
+                else:
+                    user_flags_dict[flag] = st.sidebar.number_input(
+                        label=parser._actions[action + 1].help,
+                        value=param,
+                        step=.001,
+                        key=flag
+                    )
 
             if flag == 'svr':
                 st.sidebar.text('Model operation:')
 
     camera_num = st.sidebar.number_input(
         label='ShapeNet rendering camera view number',
-        value=8,
+        value=13,
         key='camera_view_num'
     )
 
@@ -439,10 +448,10 @@ if __name__ == '__main__':
         renderer_instance = define_render(camera_num)
 
         # Create first and last starting shapes
-        #st.text("Below are renderings of the shapes after being run through the encoder and IMNET decoder..")
-        #diagnostic_flags = copy.deepcopy(user_FLAGS)
-        #diagnostic_flags.interpol_steps = 2
-        #st.pyplot(interpolate(FLAGS=diagnostic_flags))
+        # st.text("Below are renderings of the shapes after being run through the encoder and IMNET decoder..")
+        # diagnostic_flags = copy.deepcopy(user_FLAGS)
+        # diagnostic_flags.interpol_steps = 2
+        # st.pyplot(interpolate(FLAGS=diagnostic_flags))
 
         print(user_FLAGS)
 
@@ -452,5 +461,5 @@ if __name__ == '__main__':
                 st.pyplot(interpolate(FLAGS=user_FLAGS))
         if user_FLAGS.deepdream:
             st.text('Deepdream results:')
-            with st.spinner('Interpolating: expected wait time is {} seconds..'.format(user_FLAGS.interpol_steps * 10)):
+            with st.spinner('Deep Dreaming: expected wait time is {} seconds..'.format(user_FLAGS.interpol_steps * 30)):
                 st.pyplot(deepdream(user_FLAGS))

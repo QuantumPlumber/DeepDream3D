@@ -1,23 +1,39 @@
 # DeepDream3D
-This is a project exploring the concept of [DeepDream](https://github.com/google/deepdream.git) applied to 
+This is a project exploring the concept of [DeepDream](https://github.com/google/deepdream.git) and style transfer applied to 
 3D deep learning generative modeling. Specifically, the [IM-NET](https://github.com/czq142857/implicit-decoder.git) model.
 The DeepDream3D module is an encapsulation of the code provided 
 by the IM-NET team, with extended functionality to enable deep dreaming. 
 
+The idea is to turn the IM-NET implicit decoder into an encoder by back-propagating gradients accumulated over the 3D model
+volume. A content and style model then serve to create content and style loss at different levels of the decoder, in 
+analogy to the different levels in a deep convolutional net. 
+
 ## Project Format:
 The code from IM-NET has been re-factored into a base model class which is subclassed into the two archetypes,
 the auto encoder (AE) and single view reconstruction (SVR). These models are further subclassed into deep dreaming 
-classes AE_DD and SVR_DD. The DeepDream3D routine requires rendering the models in the identical way
-as the original ShapeNetV2 renderings used for training. The Facebook Research team has put together a project for
+classes AE_DD and SVR_DD. Currently the AE_DD model produces stable results, but is sensitive to oscillations if the 
+hyper-parameters are not tuned correctly. 
+
+The ResNet image encoder based style transfer is currently experimental. 
+The routine requires rendering the models in the identical way
+as the original ShapeNetV1 renderings used for training. The Facebook Research team has put together a project for
 working in the 3D modeling space: PyTorch3D. Their implementation of the standard rendering scheme is deployed in the
-dreaming loop. 
+dreaming loop.
 
 ## Setup
 A docker image with sample datasets is available on the docker hub:
 
 ```
-docker pull theymightbegiants/deepdream3d:1.3
+docker pull theymightbegiants/deepdream3d:2.0
 ```
+
+To run with the limited training data provided in the docker image, run the image:
+
+```
+nvidia-docker run -it --rm -p 8501:8501 deepdream3d:2.0
+```
+
+and navigate to https://localhost:8888 to interact with the streamlit app.
 
 #### Docker Build
 
@@ -42,7 +58,7 @@ Afterwards, assuming your hardware is compatible with
 the AWS Linux ECR, you can run the streamlit app on port 8501 of localhost with:
 
 ```
-nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:1.3
+nvidia-docker run -it --rm -v /data:/data -p 8501:8501 deep-dream-3d:2.0
 ```
 
 **The Dockerfile assumes that the IM-NET pre-processed dataset has been downloaded to directory /data**
