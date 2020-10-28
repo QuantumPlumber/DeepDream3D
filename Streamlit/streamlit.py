@@ -262,7 +262,7 @@ if __name__ == '__main__':
 
     # ----------------------- read in yaml config file ----------------------------------
 
-    nominal_YAML = '../configs/default_config_ae.yml'
+    nominal_YAML = '../configs/test_ae_deepdream.yml'
     nominal_FLAGS = read_config(nominal_YAML)
 
     user_FLAGS = copy.deepcopy(nominal_FLAGS)
