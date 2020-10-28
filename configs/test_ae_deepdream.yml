@@ -96,5 +96,8 @@ layer_num: 3
 # dream update rate
 dream_rate: 0.01
 
+# style loss scaling
+beta: 1e-9
+
 # annealing rate, once every x steps
 annealing_rate: 1
