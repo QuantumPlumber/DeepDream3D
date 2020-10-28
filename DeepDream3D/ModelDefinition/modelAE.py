@@ -56,7 +56,7 @@ class IM_AE(base_model.BaseModel):
         self.checkpoint_loaded = False
 
         # load data
-        # TODO: uncomment this
+        # TODO: uncomment load data
         self.load_data()
 
         # build model

@@ -64,7 +64,7 @@ class IM_AE_DD(IM_AE):
         print('model_float shape')
         print(model_float.shape)
 
-        # This transform nescessary to accomodate coordinate transform induced in marching cubes
+        # This transform necessary to accommodate coordinate transform induced in marching cubes
         model_float = np.flip(np.transpose(model_float, (2, 1, 0)), 0)
 
         vertices, triangles = mcubes.marching_cubes(model_float, self.sampling_threshold)
@@ -158,6 +158,9 @@ class IM_AE_DD(IM_AE):
         # make sure gradients are set to zero to begin with on each pass.
         self.im_network.zero_grad()
 
+        # print(z_base.grad)
+        # create a numpy array to store accumulated derivatives
+        # accumulated_grad = np.zeros(self.z_dim, dtype=np.float64)
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -226,7 +229,8 @@ class IM_AE_DD(IM_AE):
             # Call the model on the target to get target encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
             style_activation = self.target_activation[0].clone().detach()
-
+            # style_points_mask = model_out_batch_.detach().expand(-1, -1,
+            #                                                     style_activation.size()[2]) > self.sampling_threshold
 
             style_points_mask = model_out_batch_.detach().expand(-1, -1, style_activation.size()[2])
             style_points_mask_above = style_points_mask > (1 - self.boundary) * self.sampling_threshold
@@ -236,26 +240,53 @@ class IM_AE_DD(IM_AE):
             # Call the model on the base to get base encoder layer, first set z_base to is_training = true
             _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
             base_activation = self.target_activation[0]
-
+            # base_points_mask = model_out_batch_.detach().expand(-1, -1,
+            #                                                    base_activation.size()[2]) > self.sampling_threshold
 
             base_points_mask = model_out_batch_.detach().expand(-1, -1, base_activation.size()[2])
             base_points_mask_above = base_points_mask > (1 - self.boundary) * self.sampling_threshold
             base_points_mask_below = base_points_mask > (1 + self.boundary) * self.sampling_threshold
             base_points_mask = torch.logical_and(base_points_mask_above, base_points_mask_below)
 
+            # Now compute the gradient
+            # gradient_ = np.tanh(np.abs((style_activation + base_activation) / (style_activation - base_activation)))
+            # gradient = torch.from_numpy(gradient_).to(self.device)
 
+            # no need to track gradient for these operations
+            '''
+            with torch.no_grad():
+                diff = torch.abs(style_activation - base_activation)
+                mean = diff.mean()
+                print(mean)
+                shift_diff = diff - mean
+                sigma2 = torch.pow(shift_diff, 2).mean()
+                print(sigma2)
+                mantissa = torch.pow(shift_diff / sigma2, 2) # divide by total number of points
+                # print(mantissa)
+                loss = torch.exp(-mantissa)
+            '''
+
+            # loss = base_activation / torch.abs((style_activation - base_activation) + .001)
+            # loss = style_activation - base_activation
 
             difference = style_activation - base_activation
-
+            # loss = torch.tanh(torch.sign(difference) / (torch.abs(difference) + .001))
+            # loss = torch.sign(difference) / (torch.abs(difference) + .001)
             loss = difference.detach()
 
             # Union
             loss[torch.logical_not(torch.logical_or(style_points_mask, base_points_mask))] = 0
 
+            # Intersection
+            # loss[torch.logical_or(torch.logical_not(style_points_mask), torch.logical_not(base_points_mask))] = 0
+
+            # loss[torch.logical_not(base_points_mask)] = 0
+            # print(loss)
+
             base_activation.backward(loss)
 
+            # print(z_base.grad)
 
-            # Store gradient
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
                 point = point_list[i]
@@ -292,20 +323,200 @@ class IM_AE_DD(IM_AE):
         print('writing file: ' + self.result_dir + "/" + str(step) + "_vox.ply")
         write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
+        # update base sample points for next iteration.
+        # base_mesh = Meshes(verts=[vertices])
+        # self.base_sample_points = sample_points_from_meshes(meshes=base_mesh, num_samples=int(1e5))
+
         return z_base.grad
 
-    def latent_style_transfer(self, z_style, z_target, alpha, step, plot, config):
+    def build_gram_matrix(self,
+                          z_style: torch.Tensor,
+                          z_target: torch.Tensor,
+                          config):
         '''
-        Computes the average derivative of the loss L2_base + L2_target with z_transfer evaluated over the sample field.
+        Computes the gram correlation matrix of z_style and z_transfer
+        or
+        accumulates the style loss of the loss layer and the gram matrix.
 
-
-        :param self:
-        :param z_base:
-        :param z_target:
-        :param step:
+        :param z_base: base model latent vector
+        :param z_style: style model latent vector
+        :param z_transfer: transfer style model
+        :param step: iteration step
+        :param plot: whether to plot
+        :param flag: whether to compute the content (true) or style (false) error
+        :param config: configuration parameters
         :return:
         '''
 
+        model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
+        dimc = self.cell_grid_size
+        dimf = self.frame_grid_size  # coarse model evaluation
+
+        frame_flag = np.zeros([dimf + 2, dimf + 2, dimf + 2], np.uint8)
+        queue = []
+
+        style_gram_record = []
+        target_gram_record = []
+
+        frame_batch_num = int(dimf ** 3 / self.test_point_batch_size)
+        assert frame_batch_num > 0
+
+        volume_z = z_target
+
+        # get frame grid values: this gets frame voxels that contain above threshold values
+        for i in range(frame_batch_num):
+            point_coord = self.frame_coords[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            point_coord = np.expand_dims(point_coord, axis=0)
+            point_coord = torch.from_numpy(point_coord)
+            point_coord = point_coord.to(self.device)
+
+            _, model_out_ = self.im_network(None, volume_z, point_coord, is_training=False)
+            model_out = model_out_.detach().cpu().numpy()[0]
+            # TODO: remove dummy data
+            # model_out = np.random.random(size=[1, 4096, 1])
+
+            x_coords = self.frame_x[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            y_coords = self.frame_y[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            z_coords = self.frame_z[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
+            frame_flag[x_coords + 1, y_coords + 1, z_coords + 1] = np.reshape(
+                (model_out > self.sampling_threshold).astype(np.uint8), [self.test_point_batch_size])
+
+        # get queue and fill up ones
+        # This puts together a que of frame points to compute values.
+        for i in range(1, dimf + 1):
+            for j in range(1, dimf + 1):
+                for k in range(1, dimf + 1):
+                    maxv = np.max(frame_flag[i - 1:i + 2, j - 1:j + 2, k - 1:k + 2])
+                    minv = np.min(frame_flag[i - 1:i + 2, j - 1:j + 2, k - 1:k + 2])
+                    if maxv != minv:
+                        queue.append((i, j, k))
+                    elif maxv == 1:
+                        x_coords = self.cell_x + (i - 1) * dimc
+                        y_coords = self.cell_y + (j - 1) * dimc
+                        z_coords = self.cell_z + (k - 1) * dimc
+                        model_float[x_coords + 1, y_coords + 1, z_coords + 1] = 1.0
+
+        print("running queue:", len(queue))
+        cell_batch_size = dimc ** 3
+        cell_batch_num = int(self.test_point_batch_size / cell_batch_size)
+        assert cell_batch_num > 0
+
+        # run queue
+        iter_num = 0
+        points_num = 0
+        while len(queue) > 0:
+            batch_num = min(len(queue), cell_batch_num)
+            point_list = []
+            cell_coords = []
+            for i in range(batch_num):
+                point = queue.pop(0)
+                point_list.append(point)
+                cell_coords.append(self.cell_coords[point[0] - 1, point[1] - 1, point[2] - 1])
+            cell_coords = np.concatenate(cell_coords, axis=0)
+            num_points = cell_coords.shape[0]  # record the number of points
+            cell_coords = np.expand_dims(cell_coords, axis=0)
+            cell_coords = torch.from_numpy(cell_coords)
+            cell_coords = cell_coords.to(self.device)
+
+            # Call the model on the target to get target encoder layer
+            _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
+            style_gram_activation = self.gram_activation[0].clone().detach().squeeze()
+
+            style_gram_record.append(style_gram_activation)
+            # print(style_gram_record.shape)
+
+            # Call the model on the target to get target encoder layer
+            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            target_gram_activation = self.gram_activation[0].clone().detach().squeeze()
+
+            target_gram_record.append(target_gram_activation)
+
+            model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
+            for i in range(batch_num):
+                point = point_list[i]
+                model_out = model_out_batch[i * cell_batch_size:(i + 1) * cell_batch_size, 0]
+                x_coords = self.cell_x + (point[0] - 1) * dimc
+                y_coords = self.cell_y + (point[1] - 1) * dimc
+                z_coords = self.cell_z + (point[2] - 1) * dimc
+                model_float[x_coords + 1, y_coords + 1, z_coords + 1] = model_out
+
+                if np.max(model_out) > self.sampling_threshold:
+                    for i in range(-1, 2):
+                        pi = point[0] + i
+                        if pi <= 0 or pi > dimf: continue
+                        for j in range(-1, 2):
+                            pj = point[1] + j
+                            if pj <= 0 or pj > dimf: continue
+                            for k in range(-1, 2):
+                                pk = point[2] + k
+                                if pk <= 0 or pk > dimf: continue
+                                if (frame_flag[pi, pj, pk] == 0):
+                                    frame_flag[pi, pj, pk] = 1
+                                    queue.append((pi, pj, pk))
+
+            # print('iteration {} of {} completed'.format(iter_num, total_iter))
+            points_num += num_points
+            # print(points_num)
+            iter_num += 1
+
+        # Now compute the global gram correlation matrix
+        style_gram_record = torch.cat(style_gram_record, dim=0)
+        #del style_gram_record
+        #style_gram_record = style_gram_record_
+        print(style_gram_record.shape)
+        target_gram_record = torch.cat(target_gram_record, dim=0)
+        # del target_gram_record
+        # target_gram_record = target_gram_record_
+        target_gram_record.requires_grad_()
+        target_gram_matrix = torch.matmul(torch.transpose(target_gram_record, 0, 1), target_gram_record)
+        style_gram_matrix = torch.matmul(torch.transpose(style_gram_record, 0, 1), style_gram_record)
+        # print(style_gram_matrix.shape)
+        mse_loss = torch.nn.MSELoss()
+        loss = mse_loss(target_gram_matrix, style_gram_matrix)
+        loss.backward(retain_graph=False)
+
+        # catch memory leak
+        # if isinstance(self.target_gram_loss, torch.Tensor):
+        #     del self.target_gram_loss
+
+        # self.target_gram_loss.data = target_gram_record.grad.detach().clone()
+
+        # clean up memory explicitely
+        # del loss, target_gram_matrix, style_gram_matrix, target_gram_record, style_gram_record
+        print('gram_record grad:')
+        print(target_gram_record.grad.norm())
+        gram_out = target_gram_record.grad.detach().clone()
+        # gram_out = gram_out / gram_out.norm()
+        # print(gram_out)
+        return gram_out
+
+    def latent_style_transfer(self,
+                              z_base: torch.Tensor,
+                              z_style: torch.Tensor,
+                              z_target: torch.Tensor,
+                              gram_loss: torch.Tensor,
+                              step: int,
+                              plot: bool,
+                              flag: bool,
+                              config):
+        '''
+        Computes the gram correlation matrix of z_style and z_transfer
+        or
+        accumulates the style loss of the loss layer and the gram matrix.
+
+        :param z_base: base model latent vector
+        :param z_style: style model latent vector
+        :param z_transfer: transfer style model
+        :param step: iteration step
+        :param plot: whether to plot
+        :param flag: whether to compute the content (true) or style (false) error
+        :param config: configuration parameters
+        :return:
+        '''
+
+        # scaling variables for style (alpha) and activation (beta) loss.
+        alpha = 1.0
+        beta = config.beta
 
         model_float = np.zeros([self.real_size + 2, self.real_size + 2, self.real_size + 2], np.float32)
         dimc = self.cell_grid_size
@@ -324,9 +535,9 @@ class IM_AE_DD(IM_AE):
             point_coord = torch.from_numpy(point_coord)
             point_coord = point_coord.to(self.device)
 
-            # TODO: remove dummy data
-            _, model_out_ = self.im_network(None, z_style, point_coord, is_training=False)
+            _, model_out_ = self.im_network(None, z_target, point_coord, is_training=False)
             model_out = model_out_.detach().cpu().numpy()[0]
+            # TODO: remove dummy data
             # model_out = np.random.random(size=[1, 4096, 1])
 
             x_coords = self.frame_x[i * self.test_point_batch_size:(i + 1) * self.test_point_batch_size]
@@ -355,9 +566,10 @@ class IM_AE_DD(IM_AE):
         cell_batch_size = dimc ** 3
         cell_batch_num = int(self.test_point_batch_size / cell_batch_size)
         assert cell_batch_num > 0
+
         # run queue
         iter_num = 0
-        total_iter = que_len // cell_batch_num
+        points_num = 0
         while len(queue) > 0:
             batch_num = min(len(queue), cell_batch_num)
             point_list = []
@@ -367,34 +579,32 @@ class IM_AE_DD(IM_AE):
                 point_list.append(point)
                 cell_coords.append(self.cell_coords[point[0] - 1, point[1] - 1, point[2] - 1])
             cell_coords = np.concatenate(cell_coords, axis=0)
+            num_points = cell_coords.shape[0]  # record the number of points
             cell_coords = np.expand_dims(cell_coords, axis=0)
             cell_coords = torch.from_numpy(cell_coords)
             cell_coords = cell_coords.to(self.device)
 
-            # Call the model on the target to get target encoder layer
-            _, model_out_batch_ = self.im_network(None, z_style, cell_coords, is_training=False)
-            style_activation = self.target_activation[0].clone().detach()
+            # Call the model on the base to get base encoder layer
+            _, model_out_batch_ = self.im_network(None, z_base, cell_coords, is_training=False)
+            base_activation = self.target_activation[0].clone().detach()
 
-            style_points_mask = model_out_batch_.detach().expand(-1, -1, style_activation.size()[2])
-            style_points_mask_above = style_points_mask > (1 - self.boundary) * self.sampling_threshold
-            style_points_mask_below = style_points_mask > (1 + self.boundary) * self.sampling_threshold
-            style_points_mask = torch.logical_and(style_points_mask_above, style_points_mask_below)
-
-            # Call the model on the base to get base encoder layer, first set z_base to is_training = true
+            # Call the model on the base to get base encoder layer
             _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
-            transfer_activation = self.target_activation[0]
-
-            mask = style_points_mask
+            target_activation = self.target_activation[0]
 
             # Now compute the gradient
             mse_loss = torch.nn.MSELoss()
-            L2_style = mse_loss(transfer_activation, style_activation)
+            L2_base = alpha * mse_loss(target_activation, base_activation)
+            L2_base.backward(retain_graph=False)
 
-            loss = alpha * L2_style
+            # Call the model on the target to get base target layer
+            _, model_out_batch_ = self.im_network(None, z_target, cell_coords, is_training=False)
+            target_gram_activation = self.gram_activation[0]
 
-            loss.backward()
 
-
+            L2_style = target_gram_activation
+            L2_style.backward(beta * gram_loss[points_num:(points_num + num_points), :].unsqueeze(0),
+                              retain_graph=False)
 
             model_out_batch = model_out_batch_.detach().cpu().numpy()[0]
             for i in range(batch_num):
@@ -419,7 +629,8 @@ class IM_AE_DD(IM_AE):
                                     frame_flag[pi, pj, pk] = 1
                                     queue.append((pi, pj, pk))
 
-            print('iteration {} of {} completed'.format(iter_num, total_iter))
+            # print('iteration {} of {} completed'.format(iter_num, total_iter))
+            points_num += num_points
             iter_num += 1
 
         if plot:
@@ -434,7 +645,7 @@ class IM_AE_DD(IM_AE):
             write_ply_triangle(self.result_dir + "/" + str(step) + "_vox.ply", vertices, triangles)
 
         # return accumulated gradient of z_transfer
-        return z_target.grad
+        return z_target.grad.clone().detach()
 
     def deep_dream(self, config):
         '''
@@ -454,6 +665,10 @@ class IM_AE_DD(IM_AE):
         self.dream_rate = config.dream_rate
         self.boundary = .1
 
+        # setup style scaling
+        self.base_scale = 1
+        self.style_scale = 1
+
         # Set up forward hook to pull values
         self.layer_num = config.layer_num
         # list index includes as zero entry the generator module itself. (layer indices start from 1)
@@ -466,17 +681,13 @@ class IM_AE_DD(IM_AE):
         self.target_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
         self.target_activation = [None]
         self.target_layer.register_forward_hook(self.get_activation(self.target_activation))
+        self.target_gram_loss = None
 
-        # this is the way to get the actual model variable
-        self.content_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
-        self.content_activation = [None]
-        self.content_layer.register_forward_hook(self.get_activation(self.content_activation))
-
-        # this is the way to get the actual model variable
-        self.style_layer = list(self.im_network.generator.named_modules())[1][1]
-        self.style_activation = [None]
-        self.style_layer.register_forward_hook(self.get_activation(self.style_activation))
-
+        # choose the first layer as the style layer to produce the gram matrices
+        self.gram_layer = list(self.im_network.generator.named_modules())[self.layer_num][1]
+        self.gram_activation = [None]
+        self.gram_layer.register_forward_hook(self.get_activation(self.gram_activation))
+        target_gram_grad = None
 
         # get config values
         z1 = int(config.interpol_z1)
@@ -497,8 +708,10 @@ class IM_AE_DD(IM_AE):
 
         # TODO: comment out dummy data
         z1_vec_ = torch.from_numpy(self.get_zvec(z1)).float().to(self.device)
+        # z1_vec_copy = z1_vec_.clone()
         # z1_vec_ = torch.from_numpy(np.random.random(size=[256])).type(torch.FloatTensor).to(self.device)
         z1_base = z1_vec_.detach().clone()
+        # z1_vec = torch.rand(256, requires_grad=True, device=self.device)
         z1_vec = torch.autograd.Variable(z1_vec_, requires_grad=True)
 
         self.create_model_mesh(z1_base, 'base_model')
@@ -509,36 +722,56 @@ class IM_AE_DD(IM_AE):
 
         self.create_model_mesh(z2_vec, 'style_model')
 
+
         for step in range(interpol_steps):
             start_time = time.perf_counter()
 
-            # accumulate the gradient
+            if step < 2:
+                # keep the style scaling at 1 for the first few iterations.
+                self.base_scale = 1
+                self.style_scale = 1
+
+            # accumulate the gradient below
+
+            # zero out the gradient on each step
+            self.im_network.zero_grad()
+            if isinstance(z1_vec.grad, torch.Tensor):
+                print('reset leaf gradient to zero.')
+                z1_vec.grad.zero_()
+
+            # compute non-local style loss
+
+            # must delete large style vector between runs, otherwise memory leak
+            if target_gram_grad is not None:
+                del target_gram_grad
+                torch.cuda.empty_cache() # must completely free memory from torch to avoid segmentation problems
+
+            target_gram_grad = self.build_gram_matrix(z_style=z2_vec,
+                                                      z_target=z1_vec,
+                                                      config=config)
 
             # zero out the gradient on each step
             self.im_network.zero_grad()
 
-            # accumulate base gradients
-            _ = self.latent_style_transfer(z_style=z1_base,
-                                              z_target=z1_vec,
-                                              alpha=1.0,
-                                              step=step,
-                                              plot=False,
-                                              config=config)
-
-            # accumulate style gradients
-            grad = self.latent_style_transfer(z_style=z2_vec,
-                                              z_target=z1_vec,
-                                              alpha=1.0,
-                                              step=step,
-                                              plot=False,
-                                              config=config)
+            # accumulate style and content loss via backprop
+            style_loss = self.latent_style_transfer(z_base=z1_base,
+                                                    z_style=z2_vec,
+                                                    z_target=z1_vec,
+                                                    gram_loss=target_gram_grad,
+                                                    step=step,
+                                                    plot=False,
+                                                    flag=False,
+                                                    config=config)
 
 
 
-            grad_step = grad.data / (grad.data.norm() + .01) * self.dream_rate
+            # to ensure the graph does not keep a gradient record, use no_grad
+            with torch.no_grad():
+                grad_step = style_loss / style_loss.norm() * self.dream_rate
 
-            print(grad_step)
-            z1_vec.data -= grad_step
+                print(grad_step)
+                z1_vec.data -= grad_step
+                z1_vec.data = torch.clamp(z1_vec.data, 0, 1)
 
             self.create_model_mesh(z1_vec, str(step))
 

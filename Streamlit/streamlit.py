@@ -313,14 +313,14 @@ if __name__ == '__main__':
     else:
         if ae_flag:
             print('using model ae')
-            nominal_YAML = '../configs/default_config_ae.yml'
+            nominal_YAML = '../configs/test_ae_deepdream.yml'
             nominal_FLAGS = read_config(nominal_YAML)
             user_FLAGS = copy.deepcopy(nominal_FLAGS)
             user_flags_dict = vars(user_FLAGS)
 
         if svr_flag:
             print('using model svr')
-            nominal_YAML = '../configs/default_config_svr.yml'
+            nominal_YAML = '../configs/test_svr_deepdream.yml'
             nominal_FLAGS = read_config(nominal_YAML)
             user_FLAGS = copy.deepcopy(nominal_FLAGS)
             user_flags_dict = vars(user_FLAGS)
@@ -333,7 +333,7 @@ if __name__ == '__main__':
                        'interpol_z1', 'z1_im_view',
                        'interpol_z2', 'z2_im_view',
                        'interpol_steps', 'layer_num',
-                       'dream_rate', 'annealing_rate']
+                       'dream_rate', 'beta', 'annealing_rate']
 
     st.sidebar.text('Model Type:')
 
